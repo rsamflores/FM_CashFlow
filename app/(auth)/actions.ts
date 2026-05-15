@@ -13,9 +13,26 @@ export async function login(
   const password = String(formData.get("password") ?? "");
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error, data } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) return { error: error.message };
+
+  // If all memberships are recorder role, send to the recorder UI
+  const { data: memberships } = await supabase
+    .from("memberships")
+    .select("scope, role")
+    .eq("user_id", data.user.id);
+
+  const isRecorderOnly =
+    memberships &&
+    memberships.length > 0 &&
+    memberships.every((m) => m.role === "recorder");
+
+  if (isRecorderOnly) {
+    const firstScope = memberships[0].scope;
+    redirect(`/${firstScope}/recorder`);
+  }
+
   redirect("/personal/dashboard");
 }
 
