@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { Topbar } from "@/components/shell/Topbar";
 import { isValidScope, SCOPE_LABEL } from "@/lib/scope";
 import { formatMonth, svToday } from "@/lib/format";
-import { getAccounts } from "@/lib/actions/accounts";
+import { getAccounts, getPersonalCashAccounts } from "@/lib/actions/accounts";
 import { getTransactionsFrom } from "@/lib/actions/transactions";
 import { getBudgets } from "@/lib/actions/budgets";
 import { DashboardClient } from "./DashboardClient";
@@ -25,10 +25,11 @@ export default async function DashboardPage({
   const sixMonthsAgo = new Date(year, month - 5, 1);
   const fromStr = `${sixMonthsAgo.getFullYear()}-${String(sixMonthsAgo.getMonth() + 1).padStart(2, "0")}-01`;
 
-  const [accounts, transactions, budgets] = await Promise.all([
+  const [accounts, transactions, budgets, personalCashAccounts] = await Promise.all([
     getAccounts(scope),
     getTransactionsFrom(scope, fromStr),
     getBudgets(scope, currentMonthStr),
+    scope === "business" ? getPersonalCashAccounts() : Promise.resolve([]),
   ]);
 
   const confirmed = transactions.filter((tx) => tx.is_confirmed && !tx.transfer_id);
@@ -224,7 +225,7 @@ export default async function DashboardPage({
     remainingBudgetByAccount[b.account_id] = (remainingBudgetByAccount[b.account_id] ?? 0) + remaining;
   }
 
-  // Per-account projection
+  // Per-account projection (business accounts)
   const accountProjections = nonCreditAccounts.map((a) => {
     const current = Number(a.opening_balance) + (netByAccount[a.id] ?? 0);
     const pendingIncome = pendingIncomeByAccount[a.id] ?? 0;
@@ -241,8 +242,28 @@ export default async function DashboardPage({
       pendingTransferOut,
       budgetDebit,
       projected: current + pendingIncome + pendingTransferIn - pendingTransferOut - budgetDebit,
+      isCashTransfer: false,
     };
   });
+
+  // Personal cash accounts with pending business income (cash payments pending transfer to business)
+  for (const cashAcc of personalCashAccounts) {
+    const pendingIncome = pendingIncomeByAccount[cashAcc.id] ?? 0;
+    if (pendingIncome <= 0) continue;
+    const pendingTransferOut = pendingTransferOutByAccount[cashAcc.id] ?? 0;
+    accountProjections.push({
+      id: cashAcc.id,
+      name: cashAcc.name,
+      color: cashAcc.color ?? "#4cd6ff",
+      currentBalance: 0,
+      pendingIncome,
+      pendingTransferIn: 0,
+      pendingTransferOut,
+      budgetDebit: 0,
+      projected: pendingIncome - pendingTransferOut,
+      isCashTransfer: true,
+    });
+  }
 
   // Recent 8 confirmed transactions
   const recentTransactions = confirmed.slice(0, 8);

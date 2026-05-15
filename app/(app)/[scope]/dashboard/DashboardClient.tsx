@@ -24,6 +24,7 @@ type AccountProjection = {
   pendingTransferOut: number;
   budgetDebit: number;
   projected: number;
+  isCashTransfer: boolean;
 };
 
 type Props = {
@@ -227,17 +228,24 @@ export function DashboardClient({
                   >
                     <div className="w-2 h-2 rounded-full shrink-0" style={{ background: a.color }} />
                     <p className="text-body-sm font-bold text-on-surface flex-1 truncate">{a.name}</p>
+                    {a.isCashTransfer && (
+                      <span className="text-label-md px-xs rounded-full" style={{ background: "var(--color-tertiary-container)", color: "var(--color-on-tertiary-container)" }}>
+                        por depositar
+                      </span>
+                    )}
                   </div>
 
                   {/* Projection rows */}
                   <div className="px-md py-sm flex flex-col gap-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
-                        <span className="material-symbols-outlined" style={{ fontSize: 13 }}>account_balance_wallet</span>
-                        Saldo actual
-                      </span>
-                      <span className="text-body-sm text-on-surface">{formatCurrency(a.currentBalance)}</span>
-                    </div>
+                    {!a.isCashTransfer && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
+                          <span className="material-symbols-outlined" style={{ fontSize: 13 }}>account_balance_wallet</span>
+                          Saldo actual
+                        </span>
+                        <span className="text-body-sm text-on-surface">{formatCurrency(a.currentBalance)}</span>
+                      </div>
+                    )}
 
                     {a.pendingIncome > 0 && (
                       <div className="flex items-center justify-between">
