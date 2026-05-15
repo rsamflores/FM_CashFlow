@@ -92,8 +92,7 @@ export default async function DashboardPage({
   }
   const totalPendingIncome = Object.values(pendingIncomeByAccount).reduce((s, v) => s + v, 0);
 
-  // Pending transfer expenses per account: when a transfer is confirmed, this amount
-  // leaves the source account. Includes IVA auto-transfers (business → tax account).
+  // Pending transfer expenses: leaves the source account when confirmed (e.g. IVA → tax account)
   const pendingTransferOutByAccount: Record<string, number> = {};
   for (const tx of pending.filter((t) =>
     t.kind === "expense" &&
@@ -104,6 +103,18 @@ export default async function DashboardPage({
   )) {
     const amt = Number(tx.amount);
     pendingTransferOutByAccount[tx.account_id] = (pendingTransferOutByAccount[tx.account_id] ?? 0) + amt;
+  }
+
+  // Pending transfer income: arrives at the destination account when confirmed (e.g. tax account receives IVA)
+  const pendingTransferInByAccount: Record<string, number> = {};
+  for (const tx of pending.filter((t) =>
+    t.kind === "income" &&
+    !!t.transfer_id &&
+    t.occurred_on >= currentMonthStr &&
+    t.occurred_on < nextMonthStr
+  )) {
+    const amt = Number(tx.amount);
+    pendingTransferInByAccount[tx.account_id] = (pendingTransferInByAccount[tx.account_id] ?? 0) + amt;
   }
 
   // Per-category real spend (affects_balance only) — needed for projections
@@ -202,6 +213,7 @@ export default async function DashboardPage({
     const current = Number(a.opening_balance) + (netByAccount[a.id] ?? 0);
     const pendingIncome = pendingIncomeByAccount[a.id] ?? 0;
     const pendingTransferOut = pendingTransferOutByAccount[a.id] ?? 0;
+    const pendingTransferIn = pendingTransferInByAccount[a.id] ?? 0;
     const budgetDebit = remainingBudgetByAccount[a.id] ?? 0;
     return {
       id: a.id,
@@ -209,9 +221,10 @@ export default async function DashboardPage({
       color: a.color ?? "#c0c1ff",
       currentBalance: current,
       pendingIncome,
+      pendingTransferIn,
       pendingTransferOut,
       budgetDebit,
-      projected: current + pendingIncome - pendingTransferOut - budgetDebit,
+      projected: current + pendingIncome + pendingTransferIn - pendingTransferOut - budgetDebit,
     };
   });
 
