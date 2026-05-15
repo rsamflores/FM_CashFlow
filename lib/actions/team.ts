@@ -8,7 +8,7 @@ import type { Scope } from "@/lib/scope";
 export type MemberRow = {
   user_id: string;
   scope: Scope;
-  role: "owner" | "editor" | "viewer" | "recorder";
+  role: "owner" | "editor" | "viewer" | "recorder" | "employee";
   invited_email: string | null;
   full_name: string | null;
   email: string | null;
@@ -54,7 +54,7 @@ export async function getTeamMembers(): Promise<MemberRow[]> {
 
 export async function inviteMember(formData: FormData) {
   const email = (formData.get("email") as string)?.trim().toLowerCase();
-  const role = formData.get("role") as "editor" | "viewer" | "recorder";
+  const role = formData.get("role") as "editor" | "viewer" | "recorder" | "employee";
   const scopes = formData.getAll("scope") as Scope[];
 
   if (!email) return { error: "El correo es requerido" };
@@ -105,7 +105,7 @@ export async function inviteMember(formData: FormData) {
   return { success: true };
 }
 
-export async function updateMemberRole(userId: string, scope: Scope, role: "editor" | "viewer" | "recorder") {
+export async function updateMemberRole(userId: string, scope: Scope, role: "editor" | "viewer" | "recorder" | "employee") {
   const supabase = await createClient();
   const { error } = await supabase
     .from("memberships")
@@ -127,7 +127,7 @@ export async function resetMemberPassword(userId: string, newPassword: string) {
 
 export async function updateMemberPermissions(
   userId: string,
-  role: "editor" | "viewer" | "recorder",
+  role: "editor" | "viewer" | "recorder" | "employee",
   scopes: Scope[],
 ) {
   if (!scopes.length) return { error: "Selecciona al menos un ámbito" };

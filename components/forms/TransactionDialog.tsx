@@ -19,6 +19,9 @@ type Props = {
   personalCashAccounts?: AccountRow[];
   taxAccounts?: AccountRow[];
   creditCardAccounts?: AccountRow[];
+  forceConfirmed?: boolean;
+  forceAffectsBalance?: boolean;
+  filteredCategoryIds?: string[];
 };
 
 export function TransactionDialog({
@@ -33,6 +36,9 @@ export function TransactionDialog({
   personalCashAccounts = [],
   taxAccounts = [],
   creditCardAccounts = [],
+  forceConfirmed = false,
+  forceAffectsBalance = false,
+  filteredCategoryIds,
 }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -91,7 +97,9 @@ export function TransactionDialog({
     }
   }, [categoryId, categories, scope, kind]);
 
-  const filteredCategories = categories.filter((c) => c.kind === kind);
+  const filteredCategories = categories.filter(
+    (c) => c.kind === kind && (!filteredCategoryIds || filteredCategoryIds.includes(c.id)),
+  );
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
   const isCreditCard = selectedAccount?.type === "credit_card";
   const usedAmount = usedByAccount[selectedAccountId] ?? 0;
@@ -132,9 +140,10 @@ export function TransactionDialog({
     formData.set("category_id", categoryId);
     formData.set("description", description);
     formData.set("is_planned", isPlanned ? "true" : "false");
-    formData.set("affects_balance", affectsBalance ? "true" : "false");
+    formData.set("affects_balance", forceAffectsBalance ? "false" : affectsBalance ? "true" : "false");
     formData.set("is_recurring", isRecurring ? "true" : "false");
     formData.set("frequency", frequency);
+    if (forceConfirmed) formData.set("force_confirmed", "true");
     if (scope === "business" && kind === "income") {
       formData.set("is_tax_exempt", isTaxExempt ? "true" : "false");
       // Pass preferred IVA account if explicitly selected; server will auto-find if absent
@@ -568,8 +577,8 @@ export function TransactionDialog({
             </div>
           )}
 
-          {/* Affects balance — only for expenses */}
-          {kind === "expense" && (
+          {/* Affects balance — only for expenses, hidden when forceAffectsBalance */}
+          {kind === "expense" && !forceAffectsBalance && (
             <label className="flex items-center gap-md cursor-pointer">
               <div className="relative shrink-0">
                 <input

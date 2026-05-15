@@ -6,18 +6,26 @@ import { InviteDialog } from "@/components/forms/InviteDialog";
 import { EditPermissionsDialog } from "@/components/forms/EditPermissionsDialog";
 import { ResetPasswordDialog } from "@/components/forms/ResetPasswordDialog";
 
+type CategoryOption = {
+  id: string;
+  name: string;
+  color: string | null;
+};
+
 const ROLE_LABEL: Record<MemberRow["role"], string> = {
-  owner: "Propietario",
-  editor: "Editor",
-  viewer: "Visor",
+  owner:    "Propietario",
+  editor:   "Editor",
+  viewer:   "Visor",
   recorder: "Registrador",
+  employee: "Empleado",
 };
 
 const ROLE_COLOR: Record<MemberRow["role"], string> = {
-  owner: "var(--color-secondary-fixed)",
-  editor: "var(--color-primary)",
-  viewer: "var(--color-outline)",
+  owner:    "var(--color-secondary-fixed)",
+  editor:   "var(--color-primary)",
+  viewer:   "var(--color-outline)",
   recorder: "var(--color-tertiary-fixed)",
+  employee: "var(--color-tertiary)",
 };
 
 const SCOPE_LABEL: Record<string, string> = {
@@ -28,6 +36,7 @@ const SCOPE_LABEL: Record<string, string> = {
 type Props = {
   members: MemberRow[];
   currentUserId: string;
+  businessCategories?: CategoryOption[];
 };
 
 type GroupedMember = {
@@ -39,7 +48,7 @@ type GroupedMember = {
   scopes: { scope: string; role: MemberRow["role"] }[];
 };
 
-export function TeamClient({ members, currentUserId }: Props) {
+export function TeamClient({ members, currentUserId, businessCategories = [] }: Props) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editUser, setEditUser] = useState<GroupedMember | null>(null);
   const [resetUser, setResetUser] = useState<GroupedMember | null>(null);
@@ -85,9 +94,11 @@ export function TeamClient({ members, currentUserId }: Props) {
         <p className="text-label-md font-bold text-on-surface-variant mb-sm">Permisos por rol</p>
         <div className="grid gap-sm" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
           {[
-            { role: "owner", icon: "shield_person", perms: "Control total · puede invitar y eliminar miembros" },
-            { role: "editor", icon: "edit", perms: "Crear y editar transacciones, cuentas y categorías" },
-            { role: "viewer", icon: "visibility", perms: "Solo lectura · no puede modificar datos" },
+            { role: "owner",    icon: "shield_person", perms: "Control total · puede invitar y eliminar miembros" },
+            { role: "editor",   icon: "edit",          perms: "Crear y editar transacciones, cuentas y categorías" },
+            { role: "viewer",   icon: "visibility",    perms: "Solo lectura · no puede modificar datos" },
+            { role: "recorder", icon: "edit_note",     perms: "Solo puede registrar ingresos y egresos" },
+            { role: "employee", icon: "person",        perms: "Gastos propios y solicitudes de reembolso" },
           ].map(({ role, icon, perms }) => (
             <div key={role} className="flex items-start gap-sm">
               <div
@@ -119,7 +130,7 @@ export function TeamClient({ members, currentUserId }: Props) {
         </div>
 
         {users.map((user) => (
-          <MemberRow
+          <MemberRowItem
             key={user.user_id}
             user={user}
             isCurrentUser={user.user_id === currentUserId}
@@ -130,7 +141,11 @@ export function TeamClient({ members, currentUserId }: Props) {
         ))}
       </div>
 
-      <InviteDialog open={inviteOpen} onClose={() => setInviteOpen(false)} />
+      <InviteDialog
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        businessCategories={businessCategories}
+      />
 
       {editUser && (
         <EditPermissionsDialog
@@ -138,8 +153,10 @@ export function TeamClient({ members, currentUserId }: Props) {
           onClose={() => setEditUser(null)}
           userId={editUser.user_id}
           displayName={editUser.full_name ?? editUser.email ?? "—"}
-          currentRole={(editUser.scopes[0]?.role ?? "viewer") as "editor" | "viewer" | "recorder"}
+          currentRole={(editUser.scopes[0]?.role ?? "viewer") as MemberRow["role"]}
           currentScopes={editUser.scopes.map((s) => s.scope)}
+          businessCategories={businessCategories}
+          currentAssignedCategories={[]}
         />
       )}
 
@@ -155,7 +172,7 @@ export function TeamClient({ members, currentUserId }: Props) {
   );
 }
 
-function MemberRow({
+function MemberRowItem({
   user,
   isCurrentUser,
   allMembers,
@@ -177,7 +194,7 @@ function MemberRow({
   const isOwnerAnywhere = user.scopes.some((s) => s.role === "owner");
   const isPending_ = !user.accepted_at;
 
-  function handleRoleChange(scope: string, newRole: "editor" | "viewer" | "recorder") {
+  function handleRoleChange(scope: string, newRole: "editor" | "viewer" | "recorder" | "employee") {
     startTransition(async () => {
       await updateMemberRole(user.user_id, scope as "personal" | "business", newRole);
     });

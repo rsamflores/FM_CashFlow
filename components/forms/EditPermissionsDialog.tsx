@@ -2,8 +2,15 @@
 
 import { useState, useTransition, useEffect } from "react";
 import { updateMemberPermissions } from "@/lib/actions/team";
+import { setEmployeeAssignments } from "@/lib/actions/employee";
 
-type Role = "editor" | "viewer" | "recorder";
+type Role = "editor" | "viewer" | "recorder" | "employee" | "owner";
+
+type CategoryOption = {
+  id: string;
+  name: string;
+  color: string | null;
+};
 
 type Props = {
   open: boolean;
@@ -12,18 +19,32 @@ type Props = {
   displayName: string;
   currentRole: Role;
   currentScopes: string[];
+  businessCategories?: CategoryOption[];
+  currentAssignedCategories?: string[];
 };
 
 const ROLE_INFO: Record<Role, { label: string; desc: string }> = {
+  owner:    { label: "Propietario",  desc: "Control total del sistema" },
   editor:   { label: "Editor",       desc: "Puede crear y editar transacciones, cuentas y categorías" },
   viewer:   { label: "Visor",        desc: "Solo puede ver la información, sin poder modificar nada" },
   recorder: { label: "Registrador",  desc: "Solo puede registrar nuevos ingresos y egresos" },
+  employee: { label: "Empleado",     desc: "Registra gastos propios y solicita reembolsos en categorías asignadas" },
 };
 
-export function EditPermissionsDialog({ open, onClose, userId, displayName, currentRole, currentScopes }: Props) {
+export function EditPermissionsDialog({
+  open,
+  onClose,
+  userId,
+  displayName,
+  currentRole,
+  currentScopes,
+  businessCategories = [],
+  currentAssignedCategories = [],
+}: Props) {
   const [isPending, startTransition] = useTransition();
   const [role, setRole] = useState<Role>(currentRole);
   const [scopes, setScopes] = useState<string[]>(currentScopes);
+  const [assignedCategoryIds, setAssignedCategoryIds] = useState<string[]>(currentAssignedCategories);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
@@ -31,13 +52,21 @@ export function EditPermissionsDialog({ open, onClose, userId, displayName, curr
     if (open) {
       setRole(currentRole);
       setScopes(currentScopes);
+      setAssignedCategoryIds(currentAssignedCategories);
       setError(null);
       setSuccess(false);
     }
-  }, [open, currentRole, currentScopes.join(",")]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, currentRole, currentScopes.join(","), currentAssignedCategories.join(",")]);
 
   function toggleScope(s: string) {
     setScopes((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]);
+  }
+
+  function toggleCategory(id: string) {
+    setAssignedCategoryIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -45,8 +74,15 @@ export function EditPermissionsDialog({ open, onClose, userId, displayName, curr
     if (!scopes.length) { setError("Selecciona al menos un ámbito"); return; }
     setError(null);
     startTransition(async () => {
-      const res = await updateMemberPermissions(userId, role, scopes as ("personal" | "business")[]);
+      const res = await updateMemberPermissions(userId, role as Exclude<Role, "owner">, scopes as ("personal" | "business")[]);
       if (res?.error) { setError(res.error); return; }
+
+      // If employee, also save category assignments
+      if (role === "employee" && scopes.includes("business")) {
+        const assignRes = await setEmployeeAssignments(userId, "business", assignedCategoryIds);
+        if ("error" in assignRes) { setError(assignRes.error); return; }
+      }
+
       setSuccess(true);
       setTimeout(onClose, 1200);
     });
@@ -59,7 +95,7 @@ export function EditPermissionsDialog({ open, onClose, userId, displayName, curr
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div
         className="relative w-full rounded-2xl border border-outline-variant/10 bg-surface-container flex flex-col shadow-2xl overflow-hidden"
-        style={{ maxWidth: 480 }}
+        style={{ maxWidth: 520, maxHeight: "90vh", overflowY: "auto" }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-lg py-md border-b border-outline-variant/10">
@@ -90,7 +126,7 @@ export function EditPermissionsDialog({ open, onClose, userId, displayName, curr
             <div>
               <label className="text-label-md text-on-surface-variant block mb-xs">Rol</label>
               <div className="flex flex-col gap-sm">
-                {(["editor", "viewer", "recorder"] as Role[]).map((r) => (
+                {(["editor", "viewer", "recorder", "employee"] as Exclude<Role, "owner">[]).map((r) => (
                   <button
                     key={r}
                     type="button"
@@ -114,12 +150,15 @@ export function EditPermissionsDialog({ open, onClose, userId, displayName, curr
               <div className="flex gap-sm">
                 {(["personal", "business"] as const).map((s) => {
                   const active = scopes.includes(s);
+                  // Employee role forces business scope only
+                  const disabled = role === "employee" && s === "personal";
                   return (
                     <button
                       key={s}
                       type="button"
-                      onClick={() => toggleScope(s)}
-                      className="flex-1 flex items-center gap-xs h-10 px-md rounded-lg border transition-colors"
+                      onClick={() => !disabled && toggleScope(s)}
+                      disabled={disabled}
+                      className="flex-1 flex items-center gap-xs h-10 px-md rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       style={{
                         borderColor: active ? "var(--color-secondary-fixed)" : "var(--color-outline-variant)",
                         background: active ? "var(--color-secondary-fixed)15" : "transparent",
@@ -134,7 +173,61 @@ export function EditPermissionsDialog({ open, onClose, userId, displayName, curr
                   );
                 })}
               </div>
+              {role === "employee" && (
+                <p className="text-label-md text-on-surface-variant mt-xs">
+                  Los empleados solo pueden acceder al ámbito empresarial.
+                </p>
+              )}
             </div>
+
+            {/* Category assignments — only for employee role */}
+            {role === "employee" && businessCategories.length > 0 && (
+              <div>
+                <label className="text-label-md text-on-surface-variant block mb-xs">
+                  Categorías asignadas
+                </label>
+                <p className="text-label-md text-on-surface-variant mb-sm">
+                  El empleado solo podrá registrar gastos en estas categorías.
+                </p>
+                <div className="flex flex-col gap-xs max-h-48 overflow-y-auto">
+                  {businessCategories.filter((c) => (c as CategoryOption & { kind?: string }).kind === "expense" || true).map((cat) => {
+                    const isChecked = assignedCategoryIds.includes(cat.id);
+                    const catColor = cat.color ?? "var(--color-primary)";
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => toggleCategory(cat.id)}
+                        className="flex items-center gap-sm rounded-lg border p-sm text-left transition-colors"
+                        style={{
+                          borderColor: isChecked ? catColor : "var(--color-outline-variant)",
+                          background: isChecked ? catColor + "15" : "transparent",
+                        }}
+                      >
+                        <div
+                          className="w-5 h-5 rounded flex items-center justify-center shrink-0"
+                          style={{ background: isChecked ? catColor : "transparent", border: `2px solid ${catColor}` }}
+                        >
+                          {isChecked && (
+                            <span className="material-symbols-outlined" style={{ fontSize: 14, color: "white" }}>check</span>
+                          )}
+                        </div>
+                        <div
+                          className="w-3 h-3 rounded-full shrink-0"
+                          style={{ background: catColor }}
+                        />
+                        <span className="text-body-sm text-on-surface">{cat.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {assignedCategoryIds.length === 0 && (
+                  <p className="text-label-md mt-xs" style={{ color: "var(--color-error)" }}>
+                    Sin categorías asignadas — el empleado no podrá registrar gastos.
+                  </p>
+                )}
+              </div>
+            )}
 
             {error && (
               <p className="text-label-md px-sm py-xs rounded-lg" style={{ background: "var(--color-error)15", color: "var(--color-error)" }}>

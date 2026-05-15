@@ -279,27 +279,32 @@ function AccountCard({
           </>
         ) : (
           <>
-            <p className="text-label-md text-on-surface-variant mb-sm">Este mes</p>
-            <div className="flex gap-md">
-              <div className="flex-1">
-                <p className="text-label-md text-on-surface-variant">Ingresos</p>
-                <p className="text-body-sm font-bold" style={{ color: "var(--color-secondary-fixed)" }}>
-                  {monthIncome > 0 ? `+${formatCurrency(monthIncome)}` : "—"}
-                </p>
+            <div className="mb-sm">
+              <p className="text-label-md text-on-surface-variant mb-xs">Saldo en cuenta</p>
+              <p className="text-headline-lg font-bold" style={{ color: accentColor, lineHeight: 1.1 }}>
+                {formatCurrency(currentBalance)}
+              </p>
+            </div>
+            <div className="flex gap-md pt-sm border-t border-outline-variant/10">
+              <div className="flex-1 flex items-center gap-xs">
+                <span className="material-symbols-outlined" style={{ fontSize: 14, color: "var(--color-secondary-fixed)" }}>arrow_upward</span>
+                <div>
+                  <p className="text-label-md text-on-surface-variant">Ingresos</p>
+                  <p className="text-label-md font-bold" style={{ color: "var(--color-secondary-fixed)" }}>
+                    {monthIncome > 0 ? `+${formatCurrency(monthIncome)}` : "—"}
+                  </p>
+                </div>
               </div>
-              <div className="flex-1 text-right">
-                <p className="text-label-md text-on-surface-variant">Egresos</p>
-                <p className="text-body-sm font-bold" style={{ color: "var(--color-error)" }}>
-                  {monthExpense > 0 ? `-${formatCurrency(monthExpense)}` : "—"}
-                </p>
+              <div className="flex-1 flex items-center gap-xs">
+                <span className="material-symbols-outlined" style={{ fontSize: 14, color: "var(--color-error)" }}>arrow_downward</span>
+                <div>
+                  <p className="text-label-md text-on-surface-variant">Egresos</p>
+                  <p className="text-label-md font-bold" style={{ color: "var(--color-error)" }}>
+                    {monthExpense > 0 ? `-${formatCurrency(monthExpense)}` : "—"}
+                  </p>
+                </div>
               </div>
             </div>
-            <p className="text-label-md text-on-surface-variant mt-sm">
-              Saldo{" "}
-              <span className="font-bold" style={{ color: accentColor }}>
-                {formatCurrency(currentBalance)}
-              </span>
-            </p>
           </>
         )}
       </div>

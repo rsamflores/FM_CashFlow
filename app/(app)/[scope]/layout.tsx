@@ -46,6 +46,15 @@ export default async function ScopeLayout({
     }
   }
 
+  // Redirect employee users to the employee page (unless already there or on reimbursements)
+  if (userRole === "employee") {
+    const headersList = await headers();
+    const pathname = headersList.get("x-pathname") ?? "";
+    if (!pathname.startsWith(`/${scope}/employee`) && !pathname.startsWith(`/${scope}/reimbursements`)) {
+      redirect(`/${scope}/employee`);
+    }
+  }
+
   return (
     <SidebarProvider>
       <div className="min-h-screen bg-surface">

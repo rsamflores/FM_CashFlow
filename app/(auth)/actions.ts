@@ -42,6 +42,16 @@ export async function login(
     redirect(`/${firstScope}/recorder`);
   }
 
+  const isEmployeeOnly =
+    memberships &&
+    memberships.length > 0 &&
+    memberships.every((m) => m.role === "employee");
+
+  if (isEmployeeOnly) {
+    const firstScope = memberships[0].scope;
+    redirect(`/${firstScope}/employee`);
+  }
+
   redirect("/personal/dashboard");
 }
 

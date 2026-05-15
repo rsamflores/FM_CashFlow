@@ -158,13 +158,17 @@ export async function createTransaction(scope: Scope, formData: FormData) {
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const isRecurring = formData.get("is_recurring") === "true";
+  const forceConfirmed = formData.get("force_confirmed") === "true";
   const kind = parsed.data.kind;
   const today = new Date().toLocaleDateString("en-CA");
   const isFutureTx = parsed.data.occurred_on !== today;
+
   // Expenses always start as pending — the user must confirm when they actually pay.
   // Recurring incomes always start as pending.
   // Non-recurring incomes with today's date are auto-confirmed (already received).
-  const isConfirmed = kind === "expense" ? false
+  // Recorder registering today with force_confirmed=true → always confirmed.
+  const isConfirmed = (forceConfirmed && !isFutureTx) ? true
+    : kind === "expense" ? false
     : isRecurring ? false
     : !isFutureTx;
 

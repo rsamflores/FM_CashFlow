@@ -8,13 +8,19 @@ import { ScopeSwitcher } from "./ScopeSwitcher";
 import { useSidebar } from "@/lib/sidebar-context";
 
 const NAV_ALL = [
-  { key: "dashboard",    label: "Dashboard",      icon: "dashboard",               recorderHide: true },
-  { key: "transactions", label: "Transacciones",  icon: "receipt_long",            recorderHide: false },
-  { key: "accounts",     label: "Cuentas",         icon: "account_balance",         recorderHide: true },
-  { key: "categories",   label: "Categorías",      icon: "category",                recorderHide: true },
-  { key: "budgets",      label: "Presupuestos",    icon: "account_balance_wallet",  recorderHide: true },
-  { key: "recurring",    label: "Recurrentes",     icon: "event_repeat",            recorderHide: true },
-  { key: "reports",      label: "Reportes",        icon: "analytics",               recorderHide: true },
+  { key: "dashboard",       label: "Dashboard",      icon: "dashboard",               recorderHide: true,  employeeHide: true },
+  { key: "transactions",    label: "Transacciones",  icon: "receipt_long",            recorderHide: false, employeeHide: true },
+  { key: "accounts",        label: "Cuentas",         icon: "account_balance",         recorderHide: true,  employeeHide: true },
+  { key: "categories",      label: "Categorías",      icon: "category",                recorderHide: true,  employeeHide: true },
+  { key: "budgets",         label: "Presupuestos",    icon: "account_balance_wallet",  recorderHide: true,  employeeHide: true },
+  { key: "recurring",       label: "Recurrentes",     icon: "event_repeat",            recorderHide: true,  employeeHide: true },
+  { key: "reimbursements",  label: "Reembolsos",      icon: "payments",                recorderHide: true,  employeeHide: false },
+  { key: "reports",         label: "Reportes",        icon: "analytics",               recorderHide: true,  employeeHide: true },
+] as const;
+
+const EMPLOYEE_NAV = [
+  { key: "employee",        label: "Mi Panel",        icon: "person" },
+  { key: "reimbursements",  label: "Reembolsos",      icon: "payments" },
 ] as const;
 
 type Props = { scope: Scope; userRole?: string };
@@ -24,7 +30,10 @@ export function Sidebar({ scope, userRole }: Props) {
   const { open, close } = useSidebar();
 
   const isRecorder = userRole === "recorder";
-  const NAV = NAV_ALL.filter((item) => !isRecorder || !item.recorderHide);
+  const isEmployee = userRole === "employee";
+  const NAV = isEmployee
+    ? EMPLOYEE_NAV
+    : NAV_ALL.filter((item) => !isRecorder || !item.recorderHide);
 
   const inner = (
     <aside
@@ -83,7 +92,7 @@ export function Sidebar({ scope, userRole }: Props) {
         })}
       </nav>
 
-      {!isRecorder && (
+      {!isRecorder && !isEmployee && (
         <div className="mt-auto pt-lg border-t border-outline-variant/10 space-y-xs">
           <p className="text-label-md text-on-surface-variant/50 uppercase tracking-widest px-md mb-xs">Sistema</p>
           <Link

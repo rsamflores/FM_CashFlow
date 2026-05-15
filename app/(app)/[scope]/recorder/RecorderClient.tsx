@@ -165,6 +165,7 @@ export function RecorderClient({
       <TransactionDialog
         scope={scope}
         open={dialogOpen}
+        forceConfirmed
         onClose={() => {
           setDialogOpen(false);
           setLastRegistered({ kind: defaultKind, amount: "" });

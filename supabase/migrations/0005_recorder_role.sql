@@ -19,16 +19,22 @@ RETURNS boolean LANGUAGE sql SECURITY DEFINER AS $$
   );
 $$;
 
--- 3. Allow recorder to INSERT transactions (existing editor policy stays for editor/owner)
+-- 3. SECURITY DEFINER function avoids infinite recursion when memberships has RLS
+CREATE OR REPLACE FUNCTION is_recorder(s scope_t)
+RETURNS boolean LANGUAGE sql SECURITY DEFINER AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM memberships
+    WHERE user_id = auth.uid()
+      AND scope   = s
+      AND role    = 'recorder'
+  );
+$$;
+
+-- 4. Allow recorder to INSERT transactions using the SECURITY DEFINER function
 DROP POLICY IF EXISTS "Transactions: recorders insert" ON transactions;
 CREATE POLICY "Transactions: recorders insert" ON transactions
   FOR INSERT WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM memberships m
-      WHERE m.user_id = auth.uid()
-        AND m.scope   = transactions.scope
-        AND m.role    = 'recorder'
-    )
+    is_recorder(transactions.scope::scope_t)
   );
 
 -- 4. Memberships policy: owners can manage recorder role same as others
