@@ -73,7 +73,7 @@ export async function createAccount(scope: Scope, formData: FormData) {
     is_tax_account: formData.get("is_tax_account"),
   });
 
-  if (!parsed.success) return { error: parsed.error.errors[0].message };
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const { error } = await supabase
     .from("accounts")
@@ -105,7 +105,7 @@ export async function updateAccount(
     is_tax_account: formData.get("is_tax_account"),
   });
 
-  if (!parsed.success) return { error: parsed.error.errors[0].message };
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const { error } = await supabase
     .from("accounts")

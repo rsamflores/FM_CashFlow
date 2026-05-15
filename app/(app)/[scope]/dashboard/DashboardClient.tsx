@@ -155,7 +155,7 @@ export function DashboardClient({
                 tickFormatter={(v) => `$${v >= 1000 ? (v / 1000).toFixed(0) + "k" : v}`}
               />
               <Tooltip
-                formatter={(val: number, name: string) => [formatCurrency(val), name === "income" ? "Ingresos" : "Egresos"]}
+                formatter={(val, name) => [formatCurrency(Number(val)), name === "income" ? "Ingresos" : "Egresos"]}
                 contentStyle={{
                   background: "var(--color-surface-container-high)",
                   border: "1px solid var(--color-outline-variant)",

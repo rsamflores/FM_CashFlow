@@ -53,7 +53,7 @@ export async function upsertBudget(scope: Scope, formData: FormData) {
     note: formData.get("note") || undefined,
   });
 
-  if (!parsed.success) return { error: parsed.error.errors[0].message };
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const { error } = await supabase.from("planned_budgets").upsert(
     { ...parsed.data, scope },
