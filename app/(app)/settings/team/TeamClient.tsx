@@ -37,6 +37,7 @@ type Props = {
   members: MemberRow[];
   currentUserId: string;
   businessCategories?: CategoryOption[];
+  employeeAssignments?: Record<string, string[]>;
 };
 
 type GroupedMember = {
@@ -48,7 +49,7 @@ type GroupedMember = {
   scopes: { scope: string; role: MemberRow["role"] }[];
 };
 
-export function TeamClient({ members, currentUserId, businessCategories = [] }: Props) {
+export function TeamClient({ members, currentUserId, businessCategories = [], employeeAssignments = {} }: Props) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editUser, setEditUser] = useState<GroupedMember | null>(null);
   const [resetUser, setResetUser] = useState<GroupedMember | null>(null);
@@ -158,7 +159,7 @@ export function TeamClient({ members, currentUserId, businessCategories = [] }: 
           currentRole={(editUser.scopes[0]?.role ?? "viewer") as MemberRow["role"]}
           currentScopes={editUser.scopes.map((s) => s.scope)}
           businessCategories={businessCategories}
-          currentAssignedCategories={[]}
+          currentAssignedCategories={employeeAssignments[editUser.user_id] ?? []}
         />
       )}
 

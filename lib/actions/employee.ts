@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Scope } from "@/lib/scope";
 
@@ -46,5 +47,7 @@ export async function setEmployeeAssignments(
     if (insError) return { error: insError.message };
   }
 
+  revalidatePath("/business/employee");
+  revalidatePath("/settings/team");
   return { success: true };
 }
