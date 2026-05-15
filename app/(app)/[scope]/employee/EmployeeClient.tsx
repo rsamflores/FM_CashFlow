@@ -67,7 +67,7 @@ export function EmployeeClient({
   const monthLabel = formatMonth(currentMonth);
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div>
       {/* Welcome card */}
       <div className="rounded-2xl border border-outline-variant/10 bg-surface-container p-lg mb-xl flex items-center gap-md">
         <div
