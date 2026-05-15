@@ -137,22 +137,28 @@ export default async function DashboardPage({
     pendingTransferInByAccount[tx.account_id] = (pendingTransferInByAccount[tx.account_id] ?? 0) + amt;
   }
 
-  // Per-category real spend (affects_balance only) — needed for projections
+  // Per-category real spend (affects_balance only) — used only for per-account projection debit
   const spentByCategoryReal: Record<string, number> = {};
   for (const tx of thisMonthConfirmed.filter((t) => t.kind === "expense" && t.affects_balance)) {
     spentByCategoryReal[tx.category_id] = (spentByCategoryReal[tx.category_id] ?? 0) + Number(tx.amount);
   }
 
+  // Per-category spend (all expenses) — matches the budget page totals
+  const spentByCategory: Record<string, number> = {};
+  for (const tx of thisMonthConfirmed.filter((t) => t.kind === "expense")) {
+    spentByCategory[tx.category_id] = (spentByCategory[tx.category_id] ?? 0) + Number(tx.amount);
+  }
+
   // Total budgeted: single-payment executed budgets count actual spend, not expected
   const totalBudgeted = budgets.reduce((s, b) => {
-    const spentReal = spentByCategoryReal[b.category_id] ?? 0;
-    return s + (b.is_single_payment && spentReal > 0 ? spentReal : Number(b.expected_amount));
+    const spent = spentByCategory[b.category_id] ?? 0;
+    return s + (b.is_single_payment && spent > 0 ? spent : Number(b.expected_amount));
   }, 0);
   // Remaining budget per-budget: single-payment executed → 0 remaining
   const remainingBudget = budgets.reduce((s, b) => {
-    const spentReal = spentByCategoryReal[b.category_id] ?? 0;
-    if (b.is_single_payment && spentReal > 0) return s;
-    return s + Math.max(Number(b.expected_amount) - spentReal, 0);
+    const spent = spentByCategory[b.category_id] ?? 0;
+    if (b.is_single_payment && spent > 0) return s;
+    return s + Math.max(Number(b.expected_amount) - spent, 0);
   }, 0);
 
   // Projected available = current balance + all pending income
@@ -212,16 +218,11 @@ export default async function DashboardPage({
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5);
 
-  // Budget spent per category this month (all expenses — for budget progress bars)
-  const spentByCategory: Record<string, number> = {};
-  for (const tx of thisMonthConfirmed.filter((t) => t.kind === "expense")) {
-    spentByCategory[tx.category_id] = (spentByCategory[tx.category_id] ?? 0) + Number(tx.amount);
-  }
-  // Budget remaining per account (needs spentByCategoryReal for accurate projection)
+  // Budget remaining per account — uses same spentByCategory as budget page for consistency
   const remainingBudgetByAccount: Record<string, number> = {};
   for (const b of budgets) {
     if (!b.account_id) continue;
-    const spent = spentByCategoryReal[b.category_id] ?? 0;
+    const spent = spentByCategory[b.category_id] ?? 0;
     // Single-payment executed: no remaining expected from this account
     if (b.is_single_payment && spent > 0) continue;
     const remaining = Math.max(Number(b.expected_amount) - spent, 0);
