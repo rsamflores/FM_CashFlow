@@ -1,8 +1,10 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { SidebarProvider } from "@/lib/sidebar-context";
 import { isValidScope } from "@/lib/scope";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { Scope } from "@/lib/scope";
 
 export default async function ScopeLayout({
@@ -15,13 +17,15 @@ export default async function ScopeLayout({
   const { scope } = await params;
   if (!isValidScope(scope)) notFound();
 
-  // Fetch the current user's role for this scope (used to restrict recorder nav)
+  // Fetch the current user's role for this scope
   let userRole: string | undefined;
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      const { data } = await supabase
+      // Use admin client so RLS doesn't block the membership read
+      const admin = createAdminClient();
+      const { data } = await admin
         .from("memberships")
         .select("role")
         .eq("user_id", user.id)
@@ -31,6 +35,15 @@ export default async function ScopeLayout({
     }
   } catch {
     // Non-fatal: sidebar degrades gracefully without role info
+  }
+
+  // Redirect recorder users to the recorder page (unless already there)
+  if (userRole === "recorder") {
+    const headersList = await headers();
+    const pathname = headersList.get("x-pathname") ?? "";
+    if (!pathname.startsWith(`/${scope}/recorder`)) {
+      redirect(`/${scope}/recorder`);
+    }
   }
 
   return (
