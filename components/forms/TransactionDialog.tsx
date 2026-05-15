@@ -37,7 +37,7 @@ export function TransactionDialog({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const today = new Date().toLocaleDateString("en-CA");
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/El_Salvador" });
 
   // All fields are controlled so edit pre-fill works reliably
   const [kind, setKind] = useState<"income" | "expense">(editTransaction?.kind ?? defaultKind);

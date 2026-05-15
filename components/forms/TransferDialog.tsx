@@ -19,7 +19,7 @@ export function TransferDialog({ open, onClose, allAccounts, editTransfer, editT
   const [fromId, setFromId] = useState("");
   const [toId, setToId] = useState("");
   const [amount, setAmount] = useState("");
-  const [occurredOn, setOccurredOn] = useState(new Date().toLocaleDateString("en-CA"));
+  const [occurredOn, setOccurredOn] = useState(new Date().toLocaleDateString("en-CA", { timeZone: "America/El_Salvador" }));
   const [description, setDescription] = useState("");
   const [isRecurring, setIsRecurring] = useState(false);
   const [frequency, setFrequency] = useState("monthly");
@@ -38,7 +38,7 @@ export function TransferDialog({ open, onClose, allAccounts, editTransfer, editT
         setFromId("");
         setToId("");
         setAmount("");
-        setOccurredOn(new Date().toLocaleDateString("en-CA"));
+        setOccurredOn(new Date().toLocaleDateString("en-CA", { timeZone: "America/El_Salvador" }));
         setDescription("");
         setIsRecurring(false);
         setFrequency("monthly");
