@@ -20,6 +20,7 @@ type AccountProjection = {
   color: string;
   currentBalance: number;
   pendingIncome: number;
+  pendingTransferOut: number;
   budgetDebit: number;
   projected: number;
 };
@@ -209,7 +210,7 @@ export function DashboardClient({
           </div>
           <div className="p-lg grid grid-cols-1 md:grid-cols-2 gap-lg">
             {accountProjections.map((a) => {
-              const projectedAvailable = a.currentBalance + a.pendingIncome;
+              const projectedAvailable = a.currentBalance + a.pendingIncome - a.pendingTransferOut;
               const remainder = a.projected; // currentBalance + pendingIncome - budgetDebit
               const remainderColor = remainder >= 0 ? "var(--color-secondary-fixed)" : "var(--color-error)";
               return (
@@ -245,6 +246,18 @@ export function DashboardClient({
                         </span>
                         <span className="text-body-sm font-bold" style={{ color: "var(--color-tertiary)" }}>
                           +{formatCurrency(a.pendingIncome)}
+                        </span>
+                      </div>
+                    )}
+
+                    {a.pendingTransferOut > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
+                          <span className="material-symbols-outlined" style={{ fontSize: 13 }}>swap_horiz</span>
+                          − Transferencias pendientes
+                        </span>
+                        <span className="text-body-sm font-bold" style={{ color: "var(--color-error)" }}>
+                          −{formatCurrency(a.pendingTransferOut)}
                         </span>
                       </div>
                     )}
