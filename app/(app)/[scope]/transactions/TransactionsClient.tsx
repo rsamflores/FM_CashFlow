@@ -389,7 +389,7 @@ function TransactionRow({
           <div className="w-2 h-2 rounded-full shrink-0" style={{ background: tx.account?.color ?? "var(--color-outline)" }} />
           <span className="text-body-sm text-on-surface-variant truncate">{tx.account?.name ?? "—"}</span>
         </div>
-        <span className="text-body-sm text-on-surface-variant">{formatDay(new Date(tx.occurred_on))}</span>
+        <span className="text-body-sm text-on-surface-variant">{formatDay(tx.occurred_on)}</span>
         <span className="text-body-sm font-bold text-right" style={{ color: accent }}>
           {isTransfer ? "" : (isIncome ? "+" : "-")}{formatCurrency(tx.amount)}
         </span>
@@ -410,7 +410,7 @@ function TransactionRow({
             <div className="w-2 h-2 rounded-full shrink-0" style={{ background: tx.account?.color ?? "var(--color-outline)" }} />
             <span className="text-label-md text-on-surface-variant">{tx.account?.name ?? "—"}</span>
             <span className="text-label-md text-on-surface-variant/50">·</span>
-            <span className="text-label-md text-on-surface-variant">{formatDay(new Date(tx.occurred_on))}</span>
+            <span className="text-label-md text-on-surface-variant">{formatDay(tx.occurred_on)}</span>
           </div>
         </div>
         <div className="flex flex-col items-end gap-xs shrink-0">
