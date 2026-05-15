@@ -8,12 +8,14 @@ const ROLE_LABEL: Record<MemberRow["role"], string> = {
   owner: "Propietario",
   editor: "Editor",
   viewer: "Visor",
+  recorder: "Registrador",
 };
 
 const ROLE_COLOR: Record<MemberRow["role"], string> = {
   owner: "var(--color-secondary-fixed)",
   editor: "var(--color-primary)",
   viewer: "var(--color-outline)",
+  recorder: "var(--color-tertiary-fixed)",
 };
 
 const SCOPE_LABEL: Record<string, string> = {
