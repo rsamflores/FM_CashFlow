@@ -22,6 +22,7 @@ type Props = {
   forceConfirmed?: boolean;
   forceAffectsBalance?: boolean;
   filteredCategoryIds?: string[];
+  lockedAccountId?: string;
 };
 
 export function TransactionDialog({
@@ -39,6 +40,7 @@ export function TransactionDialog({
   forceConfirmed = false,
   forceAffectsBalance = false,
   filteredCategoryIds,
+  lockedAccountId,
 }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -49,7 +51,7 @@ export function TransactionDialog({
   const [kind, setKind] = useState<"income" | "expense">(editTransaction?.kind ?? defaultKind);
   const [amount, setAmount] = useState(editTransaction?.amount?.toString() ?? "");
   const [occurredOn, setOccurredOn] = useState(editTransaction?.occurred_on ?? today);
-  const [selectedAccountId, setSelectedAccountId] = useState(editTransaction?.account_id ?? "");
+  const [selectedAccountId, setSelectedAccountId] = useState(lockedAccountId ?? editTransaction?.account_id ?? "");
   const [categoryId, setCategoryId] = useState(editTransaction?.category_id ?? "");
   const [description, setDescription] = useState(editTransaction?.description ?? "");
   const [isPlanned, setIsPlanned] = useState(editTransaction?.is_planned ?? false);
@@ -67,7 +69,7 @@ export function TransactionDialog({
       setKind(editTransaction?.kind ?? defaultKind);
       setAmount(editTransaction?.amount?.toString() ?? "");
       setOccurredOn(editTransaction?.occurred_on ?? today);
-      setSelectedAccountId(editTransaction?.account_id ?? "");
+      setSelectedAccountId(lockedAccountId ?? editTransaction?.account_id ?? "");
       setCategoryId(editTransaction?.category_id ?? "");
       setDescription(editTransaction?.description ?? "");
       setIsPlanned(editTransaction?.is_planned ?? false);
@@ -343,6 +345,9 @@ export function TransactionDialog({
           </div>
 
           {/* Account */}
+          {lockedAccountId ? (
+            <input type="hidden" name="account_id" value={lockedAccountId} />
+          ) : (
           <div className="flex flex-col gap-xs">
             <label className="text-label-md text-on-surface-variant">Cuenta *</label>
             {accounts.length === 0 ? (
@@ -395,6 +400,7 @@ export function TransactionDialog({
               </>
             )}
           </div>
+          )}
 
           {/* Card payment toggle — expenses only, personal scope, non-editing */}
           {kind === "expense" && scope === "personal" && creditCardAccounts.length > 0 && !editTransaction && (

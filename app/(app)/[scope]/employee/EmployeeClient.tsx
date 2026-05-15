@@ -306,6 +306,7 @@ export function EmployeeClient({
         forceConfirmed
         forceAffectsBalance
         filteredCategoryIds={assignedCategoryIds}
+        lockedAccountId={accounts[0]?.id}
         defaultKind="expense"
       />
 
