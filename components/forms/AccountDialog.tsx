@@ -7,6 +7,7 @@ import {
   type AccountRow,
 } from "@/lib/actions/accounts";
 import type { Scope } from "@/lib/scope";
+import { COLOR_PALETTE } from "@/lib/colors";
 
 const ACCOUNT_TYPES = [
   { value: "checking", label: "Cuenta corriente" },
@@ -16,18 +17,6 @@ const ACCOUNT_TYPES = [
   { value: "other", label: "Otra" },
 ] as const;
 
-const COLORS = [
-  "#c0c1ff",
-  "#c3f400",
-  "#4cd6ff",
-  "#ffb4ab",
-  "#abd600",
-  "#8083ff",
-  "#009dc1",
-  "#ff8fab",
-  "#a8e063",
-  "#ffd93d",
-];
 
 type Props = {
   scope: Scope;
@@ -40,7 +29,7 @@ export function AccountDialog({ scope, open, onClose, editAccount }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [selectedColor, setSelectedColor] = useState(
-    editAccount?.color ?? COLORS[0],
+    editAccount?.color ?? COLOR_PALETTE[0],
   );
   const [selectedType, setSelectedType] = useState(
     editAccount?.type ?? "checking",
@@ -168,8 +157,8 @@ export function AccountDialog({ scope, open, onClose, editAccount }: Props) {
             <label className="text-label-md text-on-surface-variant">
               Color de la tarjeta
             </label>
-            <div className="flex gap-sm flex-wrap">
-              {COLORS.map((color) => (
+            <div className="grid gap-xs" style={{ gridTemplateColumns: "repeat(6, 1fr)" }}>
+              {COLOR_PALETTE.map((color) => (
                 <button
                   key={color}
                   type="button"
@@ -177,15 +166,27 @@ export function AccountDialog({ scope, open, onClose, editAccount }: Props) {
                   className="w-8 h-8 rounded-full transition-all"
                   style={{
                     backgroundColor: color,
-                    outline:
-                      selectedColor === color
-                        ? "2px solid white"
-                        : "2px solid transparent",
+                    outline: selectedColor === color ? "2px solid white" : "2px solid transparent",
                     outlineOffset: 2,
-                    transform: selectedColor === color ? "scale(1.15)" : "scale(1)",
+                    transform: selectedColor === color ? "scale(1.2)" : "scale(1)",
                   }}
                 />
               ))}
+            </div>
+            <div className="flex items-center gap-sm mt-xs">
+              <div className="w-8 h-8 rounded-full shrink-0 border border-outline-variant/30" style={{ backgroundColor: selectedColor }} />
+              <input
+                type="text"
+                value={selectedColor}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (/^#[0-9a-fA-F]{0,6}$/.test(v)) setSelectedColor(v);
+                }}
+                maxLength={7}
+                placeholder="#000000"
+                className="flex-1 h-8 px-sm rounded-lg bg-surface-container-high text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+              />
+              <label className="text-label-md text-on-surface-variant shrink-0">Color personalizado</label>
             </div>
           </div>
 
