@@ -101,9 +101,17 @@ export default async function EmployeePage({
   const transactions = (transactionsResult.data ?? []) as TransactionRow[];
   const accounts = (accountsResult.data ?? []) as AccountRow[];
 
+  // Fetch user's display name for topbar
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("full_name")
+    .eq("id", user.id)
+    .maybeSingle();
+  const userName = profile?.full_name || user.email?.split("@")[0] || "Empleado";
+
   return (
     <>
-      <Topbar title="Mi Panel" subtitle="Empleado" />
+      <Topbar title="Mi Panel" userName={userName} userRole="employee" />
       <EmployeeClient
         scope={scope as Scope}
         userId={user.id}

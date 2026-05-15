@@ -9,26 +9,29 @@ const OPTIONS: { key: Scope; label: string; icon: string }[] = [
   { key: "business", label: "Empresarial", icon: "business_center" },
 ];
 
-export function ScopeSwitcher({ scope }: { scope: Scope }) {
+export function ScopeSwitcher({ scope, userRole }: { scope: Scope; userRole?: string }) {
   const router = useRouter();
   const pathname = usePathname();
 
+  const isRestricted = userRole === "employee" || userRole === "recorder";
+  const visibleOptions = isRestricted ? OPTIONS.filter((o) => o.key === scope) : OPTIONS;
+
   function switchTo(next: Scope) {
-    if (next === scope) return;
-    // Swap leading /personal or /business with the new scope.
+    if (next === scope || isRestricted) return;
     const newPath = pathname.replace(/^\/(personal|business)/, `/${next}`);
     router.push(newPath);
   }
 
   return (
     <div className="flex bg-surface-container p-xs rounded-full border border-outline-variant/20">
-      {OPTIONS.map((opt) => {
+      {visibleOptions.map((opt) => {
         const active = scope === opt.key;
         return (
           <button
             key={opt.key}
             type="button"
             onClick={() => switchTo(opt.key)}
+            disabled={isRestricted}
             className={cn(
               "flex-1 flex items-center justify-center gap-xs px-xs py-xs rounded-full text-label-md transition-colors",
               active

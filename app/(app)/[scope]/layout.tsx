@@ -59,7 +59,7 @@ export default async function ScopeLayout({
     <SidebarProvider>
       <div className="min-h-screen bg-surface">
         <Sidebar scope={scope} userRole={userRole} />
-        <main className="ml-0 md:ml-[240px] pt-16 min-h-screen p-md md:p-lg">
+        <main className="ml-0 md:ml-[240px] min-h-screen px-md pb-md md:px-lg md:pb-lg pt-[80px] md:pt-[88px]">
           {children}
         </main>
       </div>

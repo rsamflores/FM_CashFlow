@@ -66,7 +66,7 @@ export function Sidebar({ scope, userRole }: Props) {
       </div>
 
       <div className="mb-lg">
-        <ScopeSwitcher scope={scope} />
+        <ScopeSwitcher scope={scope} userRole={userRole} />
       </div>
 
       <nav className="flex-1 space-y-xs overflow-y-auto custom-scrollbar">

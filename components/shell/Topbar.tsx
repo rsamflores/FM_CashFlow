@@ -3,7 +3,22 @@
 import { logout } from "@/app/(auth)/actions";
 import { useSidebar } from "@/lib/sidebar-context";
 
-export function Topbar({ title, subtitle }: { title: string; subtitle?: string }) {
+const ROLE_LABEL: Record<string, string> = {
+  owner: "Propietario", editor: "Editor", viewer: "Visor",
+  recorder: "Registrador", employee: "Empleado",
+};
+
+export function Topbar({
+  title,
+  subtitle,
+  userName,
+  userRole,
+}: {
+  title: string;
+  subtitle?: string;
+  userName?: string;
+  userRole?: string;
+}) {
   const { toggle } = useSidebar();
 
   return (
@@ -25,6 +40,19 @@ export function Topbar({ title, subtitle }: { title: string; subtitle?: string }
         </div>
       </div>
       <div className="flex items-center gap-sm md:gap-md">
+        {userName && (
+          <div className="hidden sm:flex items-center gap-xs px-sm py-xs rounded-full border border-outline-variant/20 bg-surface-container">
+            <span className="material-symbols-outlined" style={{ fontSize: 16, color: "var(--color-primary)" }}>account_circle</span>
+            <div className="leading-tight">
+              <p className="text-label-md font-bold text-on-surface">{userName}</p>
+              {userRole && (
+                <p className="text-label-md" style={{ color: "var(--color-primary)", fontSize: 10 }}>
+                  {ROLE_LABEL[userRole] ?? userRole}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
         <div className="hidden sm:flex items-center gap-xs">
           <IconButton icon="search" />
           <IconButton icon="notifications" badge />
