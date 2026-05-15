@@ -9,14 +9,15 @@ type Props = {
 };
 
 const ROLE_INFO = {
-  editor: { label: "Editor", desc: "Puede crear y editar transacciones, cuentas y categorías" },
-  viewer: { label: "Visor", desc: "Solo puede ver la información, sin poder modificar nada" },
+  editor:   { label: "Editor",    desc: "Puede crear y editar transacciones, cuentas y categorías" },
+  viewer:   { label: "Visor",     desc: "Solo puede ver la información, sin poder modificar nada" },
+  recorder: { label: "Registrador", desc: "Solo puede registrar nuevos ingresos y egresos, sin acceso a configuración" },
 };
 
 export function InviteDialog({ open, onClose }: Props) {
   const [isPending, startTransition] = useTransition();
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"editor" | "viewer">("editor");
+  const [role, setRole] = useState<"editor" | "viewer" | "recorder">("editor");
   const [scopes, setScopes] = useState<string[]>(["personal", "business"]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -98,8 +99,8 @@ export function InviteDialog({ open, onClose }: Props) {
             {/* Role */}
             <div>
               <label className="text-label-md text-on-surface-variant block mb-xs">Rol</label>
-              <div className="flex gap-sm">
-                {(["editor", "viewer"] as const).map((r) => (
+              <div className="flex flex-col gap-sm">
+                {(["editor", "viewer", "recorder"] as const).map((r) => (
                   <button
                     key={r}
                     type="button"

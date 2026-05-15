@@ -5,34 +5,55 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import type { Scope } from "@/lib/scope";
 import { ScopeSwitcher } from "./ScopeSwitcher";
+import { useSidebar } from "@/lib/sidebar-context";
 
-const NAV = [
-  { key: "dashboard", label: "Dashboard", icon: "dashboard" },
-  { key: "transactions", label: "Transacciones", icon: "receipt_long" },
-  { key: "accounts", label: "Cuentas", icon: "account_balance" },
-  { key: "categories", label: "Categorías", icon: "category" },
-  { key: "budgets", label: "Presupuestos", icon: "account_balance_wallet" },
-  { key: "recurring", label: "Recurrentes", icon: "event_repeat" },
-  { key: "reports", label: "Reportes", icon: "analytics" },
+const NAV_ALL = [
+  { key: "dashboard",    label: "Dashboard",      icon: "dashboard",               recorderHide: true },
+  { key: "transactions", label: "Transacciones",  icon: "receipt_long",            recorderHide: false },
+  { key: "accounts",     label: "Cuentas",         icon: "account_balance",         recorderHide: true },
+  { key: "categories",   label: "Categorías",      icon: "category",                recorderHide: true },
+  { key: "budgets",      label: "Presupuestos",    icon: "account_balance_wallet",  recorderHide: true },
+  { key: "recurring",    label: "Recurrentes",     icon: "event_repeat",            recorderHide: true },
+  { key: "reports",      label: "Reportes",        icon: "analytics",               recorderHide: true },
 ] as const;
 
-export function Sidebar({ scope }: { scope: Scope }) {
-  const pathname = usePathname();
+type Props = { scope: Scope; userRole?: string };
 
-  return (
-    <aside className="fixed left-0 top-0 h-full w-[240px] z-50 bg-surface-container-low shadow-md flex flex-col py-lg px-md">
-      <div className="mb-md px-sm flex items-center gap-sm">
-        <div className="w-10 h-10 bg-primary-container rounded-lg flex items-center justify-center shrink-0">
-          <span className="material-symbols-outlined text-on-primary-container">
-            account_balance_wallet
-          </span>
+export function Sidebar({ scope, userRole }: Props) {
+  const pathname = usePathname();
+  const { open, close } = useSidebar();
+
+  const isRecorder = userRole === "recorder";
+  const NAV = NAV_ALL.filter((item) => !isRecorder || !item.recorderHide);
+
+  const inner = (
+    <aside
+      className={cn(
+        "flex flex-col h-full bg-surface-container-low shadow-md py-lg px-md",
+        "fixed left-0 top-0 z-50 w-[240px]",
+        // Mobile: shown only when open (drawer); desktop: always visible
+        "transition-transform duration-300",
+        open ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+      )}
+    >
+      <div className="mb-md px-sm flex items-center justify-between">
+        <div className="flex items-center gap-sm">
+          <div className="w-10 h-10 bg-primary-container rounded-lg flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-on-primary-container">account_balance_wallet</span>
+          </div>
+          <div>
+            <h1 className="text-title-md font-bold text-secondary tracking-tight">FM-CashFlow</h1>
+            <p className="text-label-md text-on-surface-variant">Control de flujo</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-title-md font-bold text-secondary tracking-tight">
-            FM-CashFlow
-          </h1>
-          <p className="text-label-md text-on-surface-variant">Control de flujo</p>
-        </div>
+        {/* Close button — mobile only */}
+        <button
+          type="button"
+          onClick={close}
+          className="md:hidden p-xs rounded-full hover:bg-surface-container-high text-on-surface-variant"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>close</span>
+        </button>
       </div>
 
       <div className="mb-lg">
@@ -47,6 +68,7 @@ export function Sidebar({ scope }: { scope: Scope }) {
             <Link
               key={item.key}
               href={href}
+              onClick={close}
               className={cn(
                 "flex items-center gap-md px-md py-sm rounded-lg transition-colors duration-200",
                 active
@@ -54,39 +76,44 @@ export function Sidebar({ scope }: { scope: Scope }) {
                   : "text-on-surface-variant hover:bg-surface-container-high",
               )}
             >
-              <span
-                className={cn(
-                  "material-symbols-outlined",
-                  active && "fill",
-                )}
-              >
-                {item.icon}
-              </span>
+              <span className={cn("material-symbols-outlined", active && "fill")}>{item.icon}</span>
               <span className="text-body-lg">{item.label}</span>
             </Link>
           );
         })}
       </nav>
 
-      <div className="mt-auto pt-lg border-t border-outline-variant/10 space-y-xs">
-        <p className="text-label-md text-on-surface-variant/50 uppercase tracking-widest px-md mb-xs">
-          Sistema
-        </p>
-        <Link
-          href="/settings/team"
-          className={cn(
-            "flex items-center gap-md px-md py-sm rounded-lg transition-colors duration-200",
-            pathname.startsWith("/settings/team")
-              ? "text-secondary font-bold border-r-4 border-secondary bg-surface-container-high"
-              : "text-on-surface-variant hover:bg-surface-container-high",
-          )}
-        >
-          <span className={cn("material-symbols-outlined", pathname.startsWith("/settings/team") && "fill")}>
-            group
-          </span>
-          <span className="text-body-lg">Usuarios</span>
-        </Link>
-      </div>
+      {!isRecorder && (
+        <div className="mt-auto pt-lg border-t border-outline-variant/10 space-y-xs">
+          <p className="text-label-md text-on-surface-variant/50 uppercase tracking-widest px-md mb-xs">Sistema</p>
+          <Link
+            href="/settings/team"
+            onClick={close}
+            className={cn(
+              "flex items-center gap-md px-md py-sm rounded-lg transition-colors duration-200",
+              pathname.startsWith("/settings/team")
+                ? "text-secondary font-bold border-r-4 border-secondary bg-surface-container-high"
+                : "text-on-surface-variant hover:bg-surface-container-high",
+            )}
+          >
+            <span className={cn("material-symbols-outlined", pathname.startsWith("/settings/team") && "fill")}>group</span>
+            <span className="text-body-lg">Usuarios</span>
+          </Link>
+        </div>
+      )}
     </aside>
+  );
+
+  return (
+    <>
+      {inner}
+      {/* Mobile overlay backdrop */}
+      {open && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={close}
+        />
+      )}
+    </>
   );
 }

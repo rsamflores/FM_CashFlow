@@ -108,7 +108,7 @@ export function TransactionsClient({ scope, transactions, accounts, categories, 
             >
               <span className="material-symbols-outlined" style={{ fontSize: 20 }}>chevron_left</span>
             </button>
-            <span className="text-title-md text-on-surface capitalize" style={{ minWidth: 160, textAlign: "center" }}>
+            <span className="text-title-md text-on-surface capitalize" style={{ minWidth: 120, textAlign: "center" }}>
               {monthLabel}
             </span>
             <button
@@ -285,8 +285,8 @@ export function TransactionsClient({ scope, transactions, accounts, categories, 
         <EmptyTransactions onAdd={() => openCreate()} />
       ) : confirmed.length === 0 ? null : (
         <div className="bg-surface-container-low rounded-2xl border border-outline-variant/10 overflow-hidden">
-          {/* Table header */}
-          <div className="grid px-lg py-sm border-b border-outline-variant/10"
+          {/* Table header — desktop only */}
+          <div className="hidden md:grid px-lg py-sm border-b border-outline-variant/10"
             style={{ gridTemplateColumns: "1fr 140px 130px 100px 72px" }}>
             <span className="text-label-md text-on-surface-variant">Descripción / Categoría</span>
             <span className="text-label-md text-on-surface-variant">Cuenta</span>
@@ -345,93 +345,80 @@ function TransactionRow({
   const accent = isTransfer ? "var(--color-primary)" : isIncome ? "var(--color-secondary-fixed)" : "var(--color-error)";
   const catColor = isTransfer ? "var(--color-primary)" : (tx.category?.color ?? accent);
 
-  return (
-    <div
-      className="grid px-lg py-sm items-center hover:bg-surface-container transition-colors border-t border-outline-variant/10"
-      style={{ gridTemplateColumns: "1fr 140px 130px 100px 72px" }}
-    >
-      {/* Description + category */}
-      <div className="flex items-center gap-sm min-w-0">
-        <div
-          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-          style={{ background: catColor + "20" }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 18, color: catColor }}>
-            {isTransfer ? "swap_horiz" : (tx.category?.icon ?? (isIncome ? "trending_up" : "shopping_cart"))}
-          </span>
-        </div>
-        <div className="min-w-0">
-          <p className="text-body-sm text-on-surface truncate">
-            {tx.description || (isTransfer ? "Transferencia" : tx.category?.name) || "—"}
-          </p>
-          <p className="text-label-md text-on-surface-variant">
-            {isTransfer ? (isIncome ? "Transferencia entrante" : "Transferencia saliente") : tx.category?.name}
-          </p>
-        </div>
-        {!isTransfer && tx.is_planned && (
-          <span
-            className="text-label-md px-xs py-[2px] rounded-full shrink-0"
-            style={{ background: "var(--color-primary)20", color: "var(--color-primary)" }}
-          >
-            previsto
-          </span>
-        )}
-        {isTransfer && (
-          <span
-            className="text-label-md px-xs py-[2px] rounded-full shrink-0"
-            style={{ background: "var(--color-primary)20", color: "var(--color-primary)" }}
-          >
-            transferencia
-          </span>
-        )}
-        {!isTransfer && tx.kind === "expense" && !tx.affects_balance && (
-          <span
-            className="text-label-md px-xs py-[2px] rounded-full shrink-0"
-            style={{ background: "var(--color-outline)20", color: "var(--color-outline)" }}
-          >
-            externo
-          </span>
-        )}
-      </div>
-
-      {/* Account */}
-      <div className="flex items-center gap-xs">
-        <div
-          className="w-2 h-2 rounded-full shrink-0"
-          style={{ background: tx.account?.color ?? "var(--color-outline)" }}
-        />
-        <span className="text-body-sm text-on-surface-variant truncate">{tx.account?.name ?? "—"}</span>
-      </div>
-
-      {/* Date */}
-      <span className="text-body-sm text-on-surface-variant">{formatDay(new Date(tx.occurred_on))}</span>
-
-      {/* Amount */}
-      <span
-        className="text-body-sm font-bold text-right"
-        style={{ color: accent }}
-      >
-        {isTransfer ? "" : (isIncome ? "+" : "-")}{formatCurrency(tx.amount)}
+  const iconEl = (
+    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: catColor + "20" }}>
+      <span className="material-symbols-outlined" style={{ fontSize: 18, color: catColor }}>
+        {isTransfer ? "swap_horiz" : (tx.category?.icon ?? (isIncome ? "trending_up" : "shopping_cart"))}
       </span>
+    </div>
+  );
+  const descEl = (
+    <div className="min-w-0">
+      <p className="text-body-sm text-on-surface truncate">
+        {tx.description || (isTransfer ? "Transferencia" : tx.category?.name) || "—"}
+      </p>
+      <p className="text-label-md text-on-surface-variant">
+        {isTransfer ? (isIncome ? "Transferencia entrante" : "Transferencia saliente") : tx.category?.name}
+      </p>
+    </div>
+  );
+  const badgeEl = (
+    <>
+      {!isTransfer && tx.is_planned && <span className="text-label-md px-xs py-[2px] rounded-full shrink-0" style={{ background: "var(--color-primary)20", color: "var(--color-primary)" }}>previsto</span>}
+      {isTransfer && <span className="text-label-md px-xs py-[2px] rounded-full shrink-0" style={{ background: "var(--color-primary)20", color: "var(--color-primary)" }}>transferencia</span>}
+      {!isTransfer && tx.kind === "expense" && !tx.affects_balance && <span className="text-label-md px-xs py-[2px] rounded-full shrink-0" style={{ background: "var(--color-outline)20", color: "var(--color-outline)" }}>externo</span>}
+    </>
+  );
+  const actionsEl = (
+    <div className="flex gap-xs">
+      <button type="button" onClick={onEdit} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors" title="Editar">
+        <span className="material-symbols-outlined" style={{ fontSize: 14 }}>edit</span>
+      </button>
+      <button type="button" onClick={onDelete} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors" title="Eliminar">
+        <span className="material-symbols-outlined" style={{ fontSize: 14 }}>delete</span>
+      </button>
+    </div>
+  );
 
-      {/* Actions */}
-      <div className="flex gap-xs justify-end">
-        <button
-          type="button"
-          onClick={onEdit}
-          className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors"
-          title="Editar"
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>edit</span>
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors"
-          title="Eliminar"
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>delete</span>
-        </button>
+  return (
+    <div className="border-t border-outline-variant/10 hover:bg-surface-container transition-colors">
+      {/* Desktop row */}
+      <div className="hidden md:grid px-lg py-sm items-center" style={{ gridTemplateColumns: "1fr 140px 130px 100px 72px" }}>
+        <div className="flex items-center gap-sm min-w-0">{iconEl}{descEl}{badgeEl}</div>
+        <div className="flex items-center gap-xs">
+          <div className="w-2 h-2 rounded-full shrink-0" style={{ background: tx.account?.color ?? "var(--color-outline)" }} />
+          <span className="text-body-sm text-on-surface-variant truncate">{tx.account?.name ?? "—"}</span>
+        </div>
+        <span className="text-body-sm text-on-surface-variant">{formatDay(new Date(tx.occurred_on))}</span>
+        <span className="text-body-sm font-bold text-right" style={{ color: accent }}>
+          {isTransfer ? "" : (isIncome ? "+" : "-")}{formatCurrency(tx.amount)}
+        </span>
+        <div className="flex gap-xs justify-end">{actionsEl}</div>
+      </div>
+
+      {/* Mobile card */}
+      <div className="flex md:hidden items-center gap-sm px-md py-sm">
+        {iconEl}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-xs flex-wrap">
+            <p className="text-body-sm text-on-surface truncate">
+              {tx.description || (isTransfer ? "Transferencia" : tx.category?.name) || "—"}
+            </p>
+            {badgeEl}
+          </div>
+          <div className="flex items-center gap-xs mt-[2px]">
+            <div className="w-2 h-2 rounded-full shrink-0" style={{ background: tx.account?.color ?? "var(--color-outline)" }} />
+            <span className="text-label-md text-on-surface-variant">{tx.account?.name ?? "—"}</span>
+            <span className="text-label-md text-on-surface-variant/50">·</span>
+            <span className="text-label-md text-on-surface-variant">{formatDay(new Date(tx.occurred_on))}</span>
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-xs shrink-0">
+          <span className="text-body-sm font-bold" style={{ color: accent }}>
+            {isTransfer ? "" : (isIncome ? "+" : "-")}{formatCurrency(tx.amount)}
+          </span>
+          <div className="flex gap-xs">{actionsEl}</div>
+        </div>
       </div>
     </div>
   );
@@ -466,57 +453,85 @@ function PendingRow({
     ? "var(--color-primary)"
     : isExpense ? "var(--color-error)" : "var(--color-secondary-fixed)";
 
-  return (
-    <div className="flex items-center gap-md px-lg py-sm border-t border-outline-variant/10 hover:bg-surface-container transition-colors">
-      <div
-        className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-        style={{ background: catColor + "20" }}
-      >
-        <span className="material-symbols-outlined" style={{ fontSize: 18, color: catColor }}>
-          {isTransfer ? "swap_horiz" : tx.category?.icon ?? (isExpense ? "trending_down" : "trending_up")}
-        </span>
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-body-sm text-on-surface font-bold truncate">
-          {tx.description || (isTransfer ? "Transferencia" : tx.category?.name) || "—"}
-        </p>
-        <p className="text-label-md text-on-surface-variant">
-          {tx.account?.name} · {formatDay(tx.occurred_on)}
-          {tx.recurring_rule_id && (
-            <span className="ml-xs font-bold" style={{ color: "var(--color-primary)" }}>
-              · día {new Date(tx.occurred_on + "T12:00:00").getDate()} de cada mes
-            </span>
-          )}
-        </p>
-      </div>
-      <span className="text-body-sm font-bold shrink-0" style={{ color: amountColor }}>
-        {isTransfer ? "" : isExpense ? "-" : "+"}{formatCurrency(tx.amount)}
+  const iconEl = (
+    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: catColor + "20" }}>
+      <span className="material-symbols-outlined" style={{ fontSize: 18, color: catColor }}>
+        {isTransfer ? "swap_horiz" : tx.category?.icon ?? (isExpense ? "trending_down" : "trending_up")}
       </span>
-      <button
-        type="button"
-        onClick={onConfirm}
-        className="flex items-center gap-xs h-8 px-md rounded-full text-body-sm font-bold transition-colors shrink-0"
-        style={btnStyle}
-      >
-        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{btnIcon}</span>
-        {btnLabel}
-      </button>
-      <button
-        type="button"
-        onClick={onEdit}
-        className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors shrink-0"
-        title="Editar"
-      >
-        <span className="material-symbols-outlined" style={{ fontSize: 14 }}>edit</span>
-      </button>
-      <button
-        type="button"
-        onClick={onDelete}
-        className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors shrink-0"
-        title="Eliminar"
-      >
-        <span className="material-symbols-outlined" style={{ fontSize: 14 }}>delete</span>
-      </button>
+    </div>
+  );
+
+  const textEl = (
+    <div className="flex-1 min-w-0">
+      <p className="text-body-sm text-on-surface font-bold truncate">
+        {tx.description || (isTransfer ? "Transferencia" : tx.category?.name) || "—"}
+      </p>
+      <p className="text-label-md text-on-surface-variant">
+        {tx.account?.name} · {formatDay(tx.occurred_on)}
+        {tx.recurring_rule_id && (
+          <span className="ml-xs font-bold" style={{ color: "var(--color-primary)" }}>
+            · recurrente
+          </span>
+        )}
+      </p>
+    </div>
+  );
+
+  const amountEl = (
+    <span className="text-body-sm font-bold shrink-0" style={{ color: amountColor }}>
+      {isTransfer ? "" : isExpense ? "-" : "+"}{formatCurrency(tx.amount)}
+    </span>
+  );
+
+  return (
+    <div className="border-t border-outline-variant/10 hover:bg-surface-container transition-colors">
+      {/* Desktop */}
+      <div className="hidden md:flex items-center gap-md px-lg py-sm">
+        {iconEl}
+        {textEl}
+        {amountEl}
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="flex items-center gap-xs h-8 px-md rounded-full text-body-sm font-bold transition-colors shrink-0"
+          style={btnStyle}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{btnIcon}</span>
+          {btnLabel}
+        </button>
+        <button type="button" onClick={onEdit} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors shrink-0" title="Editar">
+          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>edit</span>
+        </button>
+        <button type="button" onClick={onDelete} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors shrink-0" title="Eliminar">
+          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>delete</span>
+        </button>
+      </div>
+
+      {/* Mobile */}
+      <div className="flex md:hidden items-center gap-sm px-md py-sm">
+        {iconEl}
+        {textEl}
+        <div className="flex flex-col items-end gap-xs shrink-0">
+          {amountEl}
+          <div className="flex gap-xs">
+            <button
+              type="button"
+              onClick={onConfirm}
+              className="w-7 h-7 flex items-center justify-center rounded-full text-on-surface-variant transition-colors shrink-0"
+              style={btnStyle}
+              title={btnLabel}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>{btnIcon}</span>
+            </button>
+            <button type="button" onClick={onEdit} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors shrink-0" title="Editar">
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>edit</span>
+            </button>
+            <button type="button" onClick={onDelete} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors shrink-0" title="Eliminar">
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>delete</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

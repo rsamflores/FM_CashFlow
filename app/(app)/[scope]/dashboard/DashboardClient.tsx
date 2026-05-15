@@ -82,7 +82,7 @@ export function DashboardClient({
   return (
     <div className="flex flex-col gap-xl">
       {/* KPI Cards */}
-      <div className="grid gap-lg" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-md md:gap-lg">
         <KpiCard
           label="Ingresos del mes"
           value={formatCurrency(monthIncome)}
@@ -117,7 +117,7 @@ export function DashboardClient({
         )}
       </div>
 
-      <div className="grid gap-lg" style={{ gridTemplateColumns: "1fr 300px" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-lg">
         {/* Bar chart with period toggle */}
         <div className="bg-surface-container-low rounded-2xl border border-outline-variant/10 p-lg">
           <div className="flex items-center justify-between mb-lg">
@@ -208,7 +208,7 @@ export function DashboardClient({
             <span className="text-label-md text-on-surface-variant ml-auto">Sin presupuestos definidos</span>
           )}
         </div>
-        <div className="p-lg grid gap-lg" style={{ gridTemplateColumns: accountProjections.length > 0 ? "1fr 1fr" : "1fr" }}>
+        <div className={`p-lg grid gap-lg ${accountProjections.length > 0 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"}`}>
           {/* Global breakdown */}
           <div className="flex flex-col gap-sm">
             <ProjectionRow
@@ -291,7 +291,7 @@ export function DashboardClient({
         </div>
       </div>
 
-      <div className="grid gap-lg" style={{ gridTemplateColumns: budgets.length > 0 ? "1fr 1fr" : "1fr" }}>
+      <div className={`grid gap-lg ${budgets.length > 0 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"}`}>
         {/* Recent transactions */}
         <div className="bg-surface-container-low rounded-2xl border border-outline-variant/10 overflow-hidden">
           <div className="px-lg py-md border-b border-outline-variant/10">
@@ -372,7 +372,7 @@ export function DashboardClient({
       {accounts.filter(a => a.type !== "credit_card").length > 0 && (
         <div className="bg-surface-container-low rounded-2xl border border-outline-variant/10 p-lg">
           <h3 className="text-body-sm font-bold text-on-surface mb-md">Saldo por cuenta</h3>
-          <div className="grid gap-sm" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-sm">
             {accounts.filter(a => a.type !== "credit_card").map((a) => {
               const balance = Number(a.opening_balance) + (netByAccount[a.id] ?? 0);
               const color = a.color ?? "var(--color-primary)";

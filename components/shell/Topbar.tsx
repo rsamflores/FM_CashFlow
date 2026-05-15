@@ -1,36 +1,34 @@
-import { logout } from "@/app/(auth)/actions";
+"use client";
 
-export function Topbar({
-  title,
-  subtitle,
-}: {
-  title: string;
-  subtitle?: string;
-}) {
+import { logout } from "@/app/(auth)/actions";
+import { useSidebar } from "@/lib/sidebar-context";
+
+export function Topbar({ title, subtitle }: { title: string; subtitle?: string }) {
+  const { toggle } = useSidebar();
+
   return (
-    <header className="fixed top-0 right-0 w-[calc(100%-240px)] z-40 bg-surface/80 backdrop-blur-md border-b border-outline-variant/10 flex items-center justify-between px-lg h-16 ml-[240px]">
-      <div className="flex flex-col leading-tight">
-        <span className="text-title-md font-bold text-on-surface">{title}</span>
-        {subtitle && (
-          <span className="text-body-sm text-on-surface-variant">
-            {subtitle}
-          </span>
-        )}
+    <header className="fixed top-0 right-0 w-full md:w-[calc(100%-240px)] z-40 bg-surface/80 backdrop-blur-md border-b border-outline-variant/10 flex items-center justify-between px-md md:px-lg h-16">
+      <div className="flex items-center gap-sm">
+        <button
+          type="button"
+          onClick={toggle}
+          className="md:hidden p-sm text-on-surface-variant hover:bg-surface-container-highest rounded-full transition-all"
+          aria-label="Abrir menú"
+        >
+          <span className="material-symbols-outlined">menu</span>
+        </button>
+        <div className="flex flex-col leading-tight">
+          <span className="text-title-md font-bold text-on-surface">{title}</span>
+          {subtitle && (
+            <span className="text-body-sm text-on-surface-variant hidden sm:block">{subtitle}</span>
+          )}
+        </div>
       </div>
-      <div className="flex items-center gap-md">
-        <div className="flex items-center gap-xs">
+      <div className="flex items-center gap-sm md:gap-md">
+        <div className="hidden sm:flex items-center gap-xs">
           <IconButton icon="search" />
           <IconButton icon="notifications" badge />
         </div>
-        <button
-          type="button"
-          className="hidden md:flex bg-primary-container text-on-primary-container font-bold px-md h-10 rounded-full text-body-sm items-center gap-xs hover:opacity-90"
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
-            add
-          </span>
-          Nueva transacción
-        </button>
         <form action={logout}>
           <button
             type="submit"

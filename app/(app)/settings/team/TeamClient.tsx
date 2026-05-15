@@ -145,7 +145,7 @@ function MemberRow({
   const isOwnerAnywhere = user.scopes.some((s) => s.role === "owner");
   const isPending_ = !user.accepted_at;
 
-  function handleRoleChange(scope: string, newRole: "editor" | "viewer") {
+  function handleRoleChange(scope: string, newRole: "editor" | "viewer" | "recorder") {
     startTransition(async () => {
       await updateMemberRole(user.user_id, scope as "personal" | "business", newRole);
     });
@@ -217,12 +217,13 @@ function MemberRow({
               {!isOwnerAnywhere && (
                 <select
                   value={role}
-                  onChange={(e) => handleRoleChange(scope, e.target.value as "editor" | "viewer")}
+                  onChange={(e) => handleRoleChange(scope, e.target.value as "editor" | "viewer" | "recorder")}
                   disabled={isPending}
                   className="h-7 px-xs rounded text-label-md bg-surface-container border border-outline-variant/20 text-on-surface focus:outline-none"
                 >
                   <option value="editor">Editor</option>
                   <option value="viewer">Visor</option>
+                  <option value="recorder">Registrador</option>
                 </select>
               )}
               <button
@@ -265,7 +266,7 @@ function MemberRow({
             </span>
           </div>
           {user.full_name && (
-            <p className="text-label-md text-on-surface-variant">{user.email}</p>
+            <p className="text-label-md text-on-surface-variant truncate max-w-[180px]">{user.email}</p>
           )}
           <div className="flex flex-wrap gap-xs mt-xs">
             {user.scopes.map(({ scope, role }) => (

@@ -94,8 +94,7 @@ export function AccountsClient({ scope, accounts, netByAccount, usedByAccount, t
         <EmptyAccountsState onAdd={openCreate} />
       ) : (
         <div
-          className="grid gap-lg"
-          style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-md md:gap-lg"
         >
           {accounts.map((account) => (
             <AccountCard

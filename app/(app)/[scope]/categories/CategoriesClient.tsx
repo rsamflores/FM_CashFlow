@@ -53,7 +53,7 @@ export function CategoriesClient({ scope, categories }: Props) {
         </button>
       </header>
 
-      <div className="grid gap-lg" style={{ gridTemplateColumns: "1fr 1fr" }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-lg">
         <KindColumn
           title="Ingresos"
           kind="income"

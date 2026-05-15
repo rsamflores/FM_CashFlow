@@ -173,7 +173,7 @@ function BudgetRow({
             </div>
           </div>
         </div>
-        <div className="flex gap-xs opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex gap-xs opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
           <button
             type="button"
             onClick={onEdit}
