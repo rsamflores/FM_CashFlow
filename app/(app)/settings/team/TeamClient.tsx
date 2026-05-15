@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { updateMemberRole, removeMember, type MemberRow } from "@/lib/actions/team";
 import { InviteDialog } from "@/components/forms/InviteDialog";
 import { EditPermissionsDialog } from "@/components/forms/EditPermissionsDialog";
+import { ResetPasswordDialog } from "@/components/forms/ResetPasswordDialog";
 
 const ROLE_LABEL: Record<MemberRow["role"], string> = {
   owner: "Propietario",
@@ -41,6 +42,7 @@ type GroupedMember = {
 export function TeamClient({ members, currentUserId }: Props) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editUser, setEditUser] = useState<GroupedMember | null>(null);
+  const [resetUser, setResetUser] = useState<GroupedMember | null>(null);
 
   // Group by user
   const grouped = new Map<string, GroupedMember>();
@@ -123,6 +125,7 @@ export function TeamClient({ members, currentUserId }: Props) {
             isCurrentUser={user.user_id === currentUserId}
             allMembers={members}
             onEdit={() => setEditUser(user)}
+            onResetPassword={() => setResetUser(user)}
           />
         ))}
       </div>
@@ -139,6 +142,15 @@ export function TeamClient({ members, currentUserId }: Props) {
           currentScopes={editUser.scopes.map((s) => s.scope)}
         />
       )}
+
+      {resetUser && (
+        <ResetPasswordDialog
+          open={!!resetUser}
+          onClose={() => setResetUser(null)}
+          userId={resetUser.user_id}
+          displayName={resetUser.full_name ?? resetUser.email ?? "—"}
+        />
+      )}
     </>
   );
 }
@@ -148,11 +160,13 @@ function MemberRow({
   isCurrentUser,
   allMembers,
   onEdit,
+  onResetPassword,
 }: {
   user: GroupedMember;
   isCurrentUser: boolean;
   allMembers: MemberRow[];
   onEdit: () => void;
+  onResetPassword: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -242,6 +256,15 @@ function MemberRow({
                 <span className="material-symbols-outlined" style={{ fontSize: 13 }}>edit</span>
                 Editar rol
               </button>
+              <button
+                type="button"
+                onClick={onResetPassword}
+                disabled={isPending}
+                className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors disabled:opacity-30"
+                title="Cambiar contraseña"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>lock_reset</span>
+              </button>
               {!isOwnerAnywhere && user.scopes.map(({ scope }) => (
                 <button
                   key={scope}
@@ -305,6 +328,15 @@ function MemberRow({
               title="Editar permisos"
             >
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>
+            </button>
+            <button
+              type="button"
+              onClick={onResetPassword}
+              disabled={isPending}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors disabled:opacity-30"
+              title="Cambiar contraseña"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>lock_reset</span>
             </button>
             {!isOwnerAnywhere && (
               <button

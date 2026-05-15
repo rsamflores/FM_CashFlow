@@ -106,6 +106,14 @@ export async function updateMemberRole(userId: string, scope: Scope, role: "edit
   return { success: true };
 }
 
+export async function resetMemberPassword(userId: string, newPassword: string) {
+  if (!newPassword || newPassword.length < 8) return { error: "La contraseña debe tener al menos 8 caracteres" };
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(userId, { password: newPassword });
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
 export async function updateMemberPermissions(
   userId: string,
   role: "editor" | "viewer" | "recorder",
