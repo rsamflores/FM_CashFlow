@@ -4,7 +4,7 @@ import { useState } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from "recharts";
-import { formatCurrency, formatDay } from "@/lib/format";
+import { formatCurrency, formatDay, formatShortDay } from "@/lib/format";
 import type { TransactionRow } from "@/lib/actions/transactions";
 import type { AccountRow } from "@/lib/actions/accounts";
 import type { BudgetRow } from "@/lib/actions/budgets";
@@ -39,6 +39,7 @@ type Props = {
   recentTransactions: TransactionRow[];
   budgets: BudgetRow[];
   spentByCategory: Record<string, number>;
+  monthTransactions: TransactionRow[];
   accounts: AccountRow[];
   netByAccount: Record<string, number>;
   usedByAccount: Record<string, number>;
@@ -63,6 +64,7 @@ export function DashboardClient({
   recentTransactions,
   budgets,
   spentByCategory,
+  monthTransactions,
   accounts,
   netByAccount,
   usedByAccount,
@@ -367,38 +369,14 @@ export function DashboardClient({
               <h3 className="text-body-sm font-bold text-on-surface">Presupuestos del mes</h3>
             </div>
             <div className="flex flex-col">
-              {budgets.map((b) => {
-                const expected = Number(b.expected_amount);
-                const spent = spentByCategory[b.category_id] ?? 0;
-                const realPct = expected > 0 ? (spent / expected) * 100 : 0;
-                const pct = Math.min(realPct, 100);
-                const isOver = spent > expected;
-                const barColor = isOver ? "var(--color-error)" : pct >= 80 ? "#ffd93d" : "var(--color-secondary-fixed)";
-                const catColor = b.category?.color ?? "var(--color-primary)";
-                return (
-                  <div key={b.id} className="px-lg py-sm border-t border-outline-variant/10">
-                    <div className="flex items-center justify-between mb-xs">
-                      <div className="flex items-center gap-xs">
-                        <span className="material-symbols-outlined" style={{ fontSize: 14, color: catColor }}>
-                          {b.category?.icon ?? "category"}
-                        </span>
-                        <span className="text-body-sm text-on-surface">{b.category?.name}</span>
-                      </div>
-                      <span className="text-label-md font-bold flex items-center gap-xs" style={{ color: barColor }}>
-                        {isOver && <span className="material-symbols-outlined" style={{ fontSize: 12 }}>flag</span>}
-                        {realPct.toFixed(0)}%
-                      </span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-surface-container-highest overflow-hidden">
-                      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: barColor }} />
-                    </div>
-                    <div className="flex justify-between mt-xs">
-                      <span className="text-label-md text-on-surface-variant">{formatCurrency(spent)} gastado</span>
-                      <span className="text-label-md text-on-surface-variant">de {formatCurrency(expected)}</span>
-                    </div>
-                  </div>
-                );
-              })}
+              {budgets.map((b) => (
+                <DashboardBudgetRow
+                  key={b.id}
+                  budget={b}
+                  spent={spentByCategory[b.category_id] ?? 0}
+                  transactions={monthTransactions.filter((tx) => tx.category_id === b.category_id)}
+                />
+              ))}
             </div>
           </div>
         )}
@@ -522,6 +500,107 @@ function ProjectionRow({
       >
         {prefix}{formatCurrency(value)}
       </span>
+    </div>
+  );
+}
+
+function DashboardBudgetRow({
+  budget,
+  spent,
+  transactions,
+}: {
+  budget: BudgetRow;
+  spent: number;
+  transactions: TransactionRow[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const expected = Number(budget.expected_amount);
+  const isSingle = budget.is_single_payment;
+  const isExecuted = isSingle && spent > 0;
+  const isOver = !isSingle && spent > expected;
+  const realPct = isExecuted ? 100 : (expected > 0 ? (spent / expected) * 100 : 0);
+  const pct = Math.min(realPct, 100);
+  const available = isExecuted || isOver ? 0 : Math.max(expected - spent, 0);
+  const barColor = isExecuted ? "var(--color-secondary-fixed)"
+    : isOver ? "var(--color-error)"
+    : pct >= 80 ? "#ffd93d"
+    : "var(--color-secondary-fixed)";
+  const catColor = budget.category?.color ?? "var(--color-primary)";
+  const sortedTxs = [...transactions].sort((a, b) => b.occurred_on.localeCompare(a.occurred_on));
+
+  return (
+    <div className="border-t border-outline-variant/10">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full text-left px-lg py-sm hover:bg-surface-container/40 transition-colors"
+      >
+        <div className="flex items-center justify-between mb-xs">
+          <div className="flex items-center gap-xs min-w-0">
+            <span className="material-symbols-outlined shrink-0" style={{ fontSize: 14, color: catColor }}>
+              {budget.category?.icon ?? "category"}
+            </span>
+            <span className="text-body-sm text-on-surface truncate">{budget.category?.name}</span>
+          </div>
+          <div className="flex items-center gap-sm shrink-0">
+            <div className="text-right">
+              {isExecuted ? (
+                <span className="text-label-md font-bold flex items-center gap-xs" style={{ color: "var(--color-secondary-fixed)" }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 11 }}>check_circle</span>
+                  Ejecutado
+                </span>
+              ) : isOver ? (
+                <span className="text-label-md font-bold text-error">+{formatCurrency(spent - expected)} excedido</span>
+              ) : (
+                <span className="text-label-md font-bold" style={{ color: "var(--color-secondary-fixed)" }}>
+                  {formatCurrency(available)} disp.
+                </span>
+              )}
+            </div>
+            <span className="material-symbols-outlined text-on-surface-variant transition-transform"
+              style={{ fontSize: 16, transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}>
+              expand_more
+            </span>
+          </div>
+        </div>
+        <div className="h-1.5 rounded-full bg-surface-container-highest overflow-hidden mb-xs">
+          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: barColor }} />
+        </div>
+        <div className="flex justify-between">
+          <span className="text-label-md text-on-surface-variant">{formatCurrency(spent)} gastado</span>
+          <span className="text-label-md text-on-surface-variant">{realPct.toFixed(0)}% de {formatCurrency(expected)}</span>
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-outline-variant/10 bg-surface-container/30">
+          {sortedTxs.length === 0 ? (
+            <p className="text-label-md text-on-surface-variant text-center py-sm px-lg">Sin transacciones este mes</p>
+          ) : (
+            <div className="divide-y divide-outline-variant/10">
+              {sortedTxs.map((tx) => (
+                <div key={tx.id} className="flex items-center justify-between px-lg py-xs">
+                  <div className="flex items-center gap-sm min-w-0">
+                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${tx.is_confirmed ? "" : "opacity-40"}`}
+                      style={{ background: catColor }} />
+                    <div className="min-w-0">
+                      <p className={`text-body-sm truncate ${tx.is_confirmed ? "text-on-surface" : "text-on-surface-variant"}`}>
+                        {tx.description || budget.category?.name || "—"}
+                      </p>
+                      <p className="text-label-md text-on-surface-variant">
+                        {formatShortDay(tx.occurred_on)}{!tx.is_confirmed ? " · pendiente" : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`text-body-sm font-bold shrink-0 ml-sm ${tx.is_confirmed ? "text-error" : "text-on-surface-variant"}`}>
+                    −{formatCurrency(Number(tx.amount))}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

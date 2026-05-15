@@ -289,6 +289,7 @@ export default async function DashboardPage({
         recentTransactions={recentTransactions}
         budgets={budgets}
         spentByCategory={spentByCategory}
+        monthTransactions={thisMonthConfirmed}
         accounts={accounts}
         netByAccount={netByAccount}
         usedByAccount={usedByAccount}
