@@ -5,6 +5,7 @@ import { getBudgets } from "@/lib/actions/budgets";
 import { getCategories } from "@/lib/actions/categories";
 import { getTransactions } from "@/lib/actions/transactions";
 import { getAccounts } from "@/lib/actions/accounts";
+import { svToday } from "@/lib/format";
 import { BudgetsClient } from "./BudgetsClient";
 
 export default async function BudgetsPage({
@@ -15,8 +16,8 @@ export default async function BudgetsPage({
   const { scope } = await params;
   if (!isValidScope(scope)) notFound();
 
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const { year, month } = svToday();
+  const currentMonth = `${year}-${String(month + 1).padStart(2, "0")}-01`;
 
   const [budgets, categories, transactions, accounts] = await Promise.all([
     getBudgets(scope, currentMonth),

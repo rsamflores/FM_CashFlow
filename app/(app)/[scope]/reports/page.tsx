@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { Topbar } from "@/components/shell/Topbar";
 import { isValidScope, SCOPE_LABEL } from "@/lib/scope";
 import { getTransactionsFrom } from "@/lib/actions/transactions";
-import { formatMonth } from "@/lib/format";
+import { formatMonth, svToday } from "@/lib/format";
 import { ReportsClient } from "./ReportsClient";
 
 export default async function ReportsPage({
@@ -13,11 +13,11 @@ export default async function ReportsPage({
   const { scope } = await params;
   if (!isValidScope(scope)) notFound();
 
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const { year, month } = svToday();
+  const currentMonth = `${year}-${String(month + 1).padStart(2, "0")}`;
 
   // Fetch confirmed transactions from the last 24 months, excluding the current month
-  const from = new Date(now.getFullYear(), now.getMonth() - 23, 1);
+  const from = new Date(year, month - 23, 1);
   const fromStr = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, "0")}-01`;
 
   const transactions = await getTransactionsFrom(scope, fromStr);

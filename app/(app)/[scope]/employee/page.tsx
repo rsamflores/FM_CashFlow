@@ -9,6 +9,7 @@ import type { TransactionRow } from "@/lib/actions/transactions";
 import type { AccountRow } from "@/lib/actions/accounts";
 import type { CategoryRow } from "@/lib/actions/categories";
 import type { BudgetRow } from "@/lib/actions/budgets";
+import { svToday } from "@/lib/format";
 import { EmployeeClient } from "./EmployeeClient";
 
 export default async function EmployeePage({
@@ -46,8 +47,8 @@ export default async function EmployeePage({
 
   const assignedCategoryIds = (assignments ?? []).map((a) => a.category_id);
 
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const { year, month } = svToday();
+  const currentMonth = `${year}-${String(month + 1).padStart(2, "0")}-01`;
 
   // Fetch data in parallel
   const [

@@ -49,3 +49,14 @@ export function formatMonth(date: Date | string): string {
 
 export const APP_LOCALE = LOCALE;
 export const APP_TZ = TZ;
+
+/**
+ * Returns the current date components in El Salvador timezone (GMT-6).
+ * Use instead of `new Date()` whenever computing "current month" or "today"
+ * to avoid UTC midnight bleeding into the wrong calendar day.
+ */
+export function svToday(): { year: number; month: number; day: number; dateStr: string } {
+  const dateStr = new Date().toLocaleDateString("en-CA", { timeZone: TZ }); // "YYYY-MM-DD"
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return { year: y, month: m - 1, day: d, dateStr }; // month is 0-indexed like JS Date
+}

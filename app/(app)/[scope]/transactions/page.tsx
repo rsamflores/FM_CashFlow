@@ -6,6 +6,7 @@ import { getAccounts, getPersonalCashAccounts } from "@/lib/actions/accounts";
 import type { AccountRow } from "@/lib/actions/accounts";
 import { getCategories } from "@/lib/actions/categories";
 import { getPaidReimbursementsForTransactions, type ReimbursementMeta } from "@/lib/actions/reimbursements";
+import { svToday } from "@/lib/format";
 import { TransactionsClient } from "./TransactionsClient";
 
 export default async function TransactionsPage({
@@ -19,8 +20,8 @@ export default async function TransactionsPage({
   const sp = await searchParams;
   if (!isValidScope(scope)) notFound();
 
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const { year, month } = svToday();
+  const currentMonth = `${year}-${String(month + 1).padStart(2, "0")}`;
   const selectedMonth = sp.month ?? currentMonth;
 
   const otherScope = scope === "personal" ? "business" : "personal";
