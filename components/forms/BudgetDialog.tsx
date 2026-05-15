@@ -31,6 +31,7 @@ export function BudgetDialog({
   const [accountId, setAccountId] = useState(editBudget?.account_id ?? "");
   const [amount, setAmount] = useState(editBudget?.expected_amount?.toString() ?? "");
   const [note, setNote] = useState(editBudget?.note ?? "");
+  const [isSinglePayment, setIsSinglePayment] = useState(editBudget?.is_single_payment ?? false);
 
   useEffect(() => {
     if (open) {
@@ -38,6 +39,7 @@ export function BudgetDialog({
       setAccountId(editBudget?.account_id ?? "");
       setAmount(editBudget?.expected_amount?.toString() ?? "");
       setNote(editBudget?.note ?? "");
+      setIsSinglePayment(editBudget?.is_single_payment ?? false);
       setError(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -56,6 +58,7 @@ export function BudgetDialog({
     formData.set("account_id", accountId);
     formData.set("expected_amount", amount);
     formData.set("note", note);
+    formData.set("is_single_payment", String(isSinglePayment));
     setError(null);
     startTransition(async () => {
       const result = await upsertBudget(scope, formData);
@@ -163,6 +166,33 @@ export function BudgetDialog({
               className="h-12 px-md rounded-lg bg-surface-container-high text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary-container outline-none border-none"
             />
           </div>
+
+          {/* Single-payment toggle */}
+          <button
+            type="button"
+            onClick={() => setIsSinglePayment((v) => !v)}
+            className="flex items-center gap-md p-md rounded-xl border transition-colors text-left"
+            style={{
+              borderColor: isSinglePayment ? "var(--color-primary)" : "var(--color-outline-variant)",
+              background: isSinglePayment ? "var(--color-primary)10" : "transparent",
+            }}
+          >
+            <div
+              className="w-10 h-6 rounded-full relative transition-colors shrink-0"
+              style={{ background: isSinglePayment ? "var(--color-primary)" : "var(--color-outline-variant)" }}
+            >
+              <div
+                className="absolute top-1 w-4 h-4 rounded-full bg-white transition-all"
+                style={{ left: isSinglePayment ? "calc(100% - 20px)" : "4px" }}
+              />
+            </div>
+            <div>
+              <p className="text-body-sm font-bold text-on-surface">Pago único</p>
+              <p className="text-label-md text-on-surface-variant">
+                Se considera ejecutado al 100% al registrar cualquier pago, sin importar el monto exacto
+              </p>
+            </div>
+          </button>
 
           {error && <p className="text-body-sm text-error">{error}</p>}
 

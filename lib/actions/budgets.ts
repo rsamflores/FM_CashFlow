@@ -11,6 +11,7 @@ const BudgetSchema = z.object({
   expected_amount: z.coerce.number().positive("El monto debe ser mayor a 0"),
   period_month: z.string().min(1, "El mes es requerido"),
   note: z.string().optional(),
+  is_single_payment: z.boolean().optional().default(false),
 });
 
 export type BudgetRow = {
@@ -21,6 +22,7 @@ export type BudgetRow = {
   period_month: string;
   expected_amount: number;
   note: string | null;
+  is_single_payment: boolean;
   created_at: string;
   category: { name: string; color: string | null; icon: string | null } | null;
   account: { name: string; color: string | null } | null;
@@ -51,6 +53,7 @@ export async function upsertBudget(scope: Scope, formData: FormData) {
     expected_amount: formData.get("expected_amount"),
     period_month: formData.get("period_month"),
     note: formData.get("note") || undefined,
+    is_single_payment: formData.get("is_single_payment") === "true",
   });
 
   if (!parsed.success) return { error: parsed.error.issues[0].message };

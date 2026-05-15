@@ -21,6 +21,7 @@ export type ReimbursementRow = {
   employee_name: string | null;
   status: "pending" | "approved" | "paid" | "rejected";
   total_amount: number;
+  code: string | null;
   bank_name: string;
   account_number: string;
   account_type: "checking" | "savings";
@@ -33,6 +34,57 @@ export type ReimbursementRow = {
   transaction_id: string | null;
   items: ReimbursementItemRow[];
 };
+
+export type ReimbursementSubItem = {
+  transactionId: string;
+  description: string | null;
+  amount: number;
+  occurred_on: string;
+  category: { name: string; color: string | null; icon: string | null } | null;
+};
+
+export type ReimbursementMeta = {
+  code: string | null;
+  items: ReimbursementSubItem[];
+};
+
+export async function getPaidReimbursementsForTransactions(
+  scope: Scope,
+): Promise<Record<string, ReimbursementMeta>> {
+  const admin = createAdminClient();
+
+  const { data, error } = await admin
+    .from("reimbursement_requests")
+    .select(`
+      transaction_id, code,
+      items:reimbursement_items(
+        transaction_id,
+        transaction:transactions(id, description, amount, occurred_on, category:categories(name, color, icon))
+      )
+    `)
+    .eq("scope", scope)
+    .eq("status", "paid")
+    .not("transaction_id", "is", null);
+
+  if (error) throw error;
+
+  const result: Record<string, ReimbursementMeta> = {};
+  for (const r of data ?? []) {
+    if (!r.transaction_id) continue;
+    result[r.transaction_id] = {
+      code: r.code ?? null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      items: (r.items ?? []).map((item: any) => ({
+        transactionId: item.transaction_id as string,
+        description: (item.transaction?.description ?? null) as string | null,
+        amount: Number(item.transaction?.amount ?? 0),
+        occurred_on: (item.transaction?.occurred_on ?? "") as string,
+        category: (item.transaction?.category ?? null) as { name: string; color: string | null; icon: string | null } | null,
+      })),
+    };
+  }
+  return result;
+}
 
 export async function getMyReimbursements(scope: Scope): Promise<ReimbursementRow[]> {
   const supabase = await createClient();

@@ -249,9 +249,17 @@ export function EmployeeClient({
               >
                 <div className="flex items-start justify-between mb-sm">
                   <div>
-                    <p className="text-body-sm font-bold text-on-surface">
-                      {formatCurrency(Number(req.total_amount))}
-                    </p>
+                    <div className="flex items-center gap-sm mb-xs">
+                      <p className="text-body-sm font-bold text-on-surface">
+                        {formatCurrency(Number(req.total_amount))}
+                      </p>
+                      {req.code && (
+                        <span className="text-label-md font-bold px-xs py-[2px] rounded-full"
+                          style={{ background: "var(--color-tertiary)20", color: "var(--color-tertiary)" }}>
+                          {req.code}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-label-md text-on-surface-variant">{formatDay(req.created_at)}</p>
                   </div>
                   <StatusChip status={req.status} />

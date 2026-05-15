@@ -30,7 +30,11 @@ export function BudgetsClient({ scope, budgets, categories, transactions, accoun
     }
   }
 
-  const totalBudgeted = budgets.reduce((s, b) => s + Number(b.expected_amount), 0);
+  // Single-payment budgets count their actual spend (not expected_amount) once executed
+  const totalBudgeted = budgets.reduce((s, b) => {
+    const spent = spentByCategory[b.category_id] ?? 0;
+    return s + (b.is_single_payment && spent > 0 ? spent : Number(b.expected_amount));
+  }, 0);
   const totalSpent = budgets.reduce((s, b) => s + (spentByCategory[b.category_id] ?? 0), 0);
 
   function openEdit(b: BudgetRow) {
@@ -136,11 +140,21 @@ function BudgetRow({
   onDelete: () => void;
 }) {
   const expected = Number(budget.expected_amount);
-  const realPct = expected > 0 ? (spent / expected) * 100 : 0;
+  const isSingle = budget.is_single_payment;
+  const isExecuted = isSingle && spent > 0;
+
+  // For single-payment executed budgets: bar at 100%, no remaining in projection
+  const realPct = isExecuted ? 100 : (expected > 0 ? (spent / expected) * 100 : 0);
   const pct = Math.min(realPct, 100);
-  const isOver = spent > expected;
-  const isWarn = !isOver && pct >= 80;
-  const barColor = isOver ? "var(--color-error)" : isWarn ? "#ffd93d" : "var(--color-secondary-fixed)";
+  const isOver = !isSingle && spent > expected;
+  const isWarn = !isOver && !isExecuted && pct >= 80;
+  const barColor = isExecuted
+    ? "var(--color-secondary-fixed)"
+    : isOver
+    ? "var(--color-error)"
+    : isWarn
+    ? "#ffd93d"
+    : "var(--color-secondary-fixed)";
   const catColor = budget.category?.color ?? "var(--color-primary)";
 
   return (
@@ -156,7 +170,15 @@ function BudgetRow({
             </span>
           </div>
           <div>
-            <p className="text-body-sm font-bold text-on-surface">{budget.category?.name ?? "—"}</p>
+            <div className="flex items-center gap-xs flex-wrap">
+              <p className="text-body-sm font-bold text-on-surface">{budget.category?.name ?? "—"}</p>
+              {isSingle && (
+                <span className="text-label-md font-bold px-xs py-[2px] rounded-full"
+                  style={{ background: "var(--color-primary)20", color: "var(--color-primary)" }}>
+                  pago único
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-xs flex-wrap">
               {budget.account && (
                 <span className="flex items-center gap-xs text-label-md text-on-surface-variant">
@@ -193,13 +215,21 @@ function BudgetRow({
 
       <div className="flex justify-between mb-sm">
         <span className="text-label-md text-on-surface-variant">
-          {formatCurrency(spent)} gastado
+          {formatCurrency(spent)} {isExecuted ? "pagado" : "gastado"}
         </span>
-        <span className="text-label-md font-bold" style={{ color: barColor }}>
-          {isOver
-            ? `+${formatCurrency(spent - expected)} excedido`
-            : `${formatCurrency(expected - spent)} restante`}
-        </span>
+        {isExecuted ? (
+          <span className="text-label-md font-bold flex items-center gap-xs"
+            style={{ color: "var(--color-secondary-fixed)" }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>check_circle</span>
+            Ejecutado
+          </span>
+        ) : (
+          <span className="text-label-md font-bold" style={{ color: barColor }}>
+            {isOver
+              ? `+${formatCurrency(spent - expected)} excedido`
+              : `${formatCurrency(expected - spent)} restante`}
+          </span>
+        )}
       </div>
 
       <div className="h-2 rounded-full bg-surface-container-highest overflow-hidden mb-xs">
@@ -210,7 +240,11 @@ function BudgetRow({
       </div>
 
       <div className="flex justify-between">
-        <span className="text-label-md text-on-surface-variant">{realPct.toFixed(0)}% de {formatCurrency(expected)}</span>
+        <span className="text-label-md text-on-surface-variant">
+          {isExecuted
+            ? `${formatCurrency(spent)} de ${formatCurrency(expected)} presupuestado`
+            : `${realPct.toFixed(0)}% de ${formatCurrency(expected)}`}
+        </span>
         {isOver && (
           <span className="text-label-md font-bold text-error flex items-center gap-xs">
             <span className="material-symbols-outlined" style={{ fontSize: 14 }}>flag</span>

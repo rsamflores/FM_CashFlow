@@ -146,6 +146,12 @@ function RequestCard({
               <p className="text-body-sm font-bold text-on-surface">
                 {request.employee_name ?? "Empleado"}
               </p>
+              {request.code && (
+                <span className="text-label-md font-bold px-xs py-[2px] rounded-full"
+                  style={{ background: "var(--color-tertiary)20", color: "var(--color-tertiary)" }}>
+                  {request.code}
+                </span>
+              )}
             </div>
             <p className="text-label-md text-on-surface-variant">{formatDay(request.created_at)}</p>
           </div>

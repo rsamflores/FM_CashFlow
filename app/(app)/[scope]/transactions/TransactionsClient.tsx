@@ -7,6 +7,7 @@ import { TransferDialog } from "@/components/forms/TransferDialog";
 import { deleteTransaction, confirmTransaction, generateRetroactiveIvaTransfers, type TransactionRow } from "@/lib/actions/transactions";
 import type { AccountRow } from "@/lib/actions/accounts";
 import type { CategoryRow } from "@/lib/actions/categories";
+import type { ReimbursementMeta } from "@/lib/actions/reimbursements";
 import { formatCurrency, formatDay, formatMonth } from "@/lib/format";
 import type { Scope } from "@/lib/scope";
 
@@ -22,9 +23,11 @@ type Props = {
   creditCardAccounts?: AccountRow[];
   selectedMonth: string;
   currentMonth: string;
+  reimbursementByTxId?: Record<string, ReimbursementMeta>;
+  coveredExpenseIds?: string[];
 };
 
-export function TransactionsClient({ scope, transactions, accounts, categories, usedByAccount, personalCashAccounts = [], allAccounts = [], taxAccounts = [], creditCardAccounts = [], selectedMonth, currentMonth }: Props) {
+export function TransactionsClient({ scope, transactions, accounts, categories, usedByAccount, personalCashAccounts = [], allAccounts = [], taxAccounts = [], creditCardAccounts = [], selectedMonth, currentMonth, reimbursementByTxId = {}, coveredExpenseIds = [] }: Props) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
@@ -83,10 +86,16 @@ export function TransactionsClient({ scope, transactions, accounts, categories, 
   const pending = transactions
     .filter((t) => !t.is_confirmed)
     .sort((a, b) => a.occurred_on.localeCompare(b.occurred_on));
-  const confirmed = transactions.filter((t) => t.is_confirmed);
 
-  // Exclude transfers from income/expense totals
-  const nonTransfer = confirmed.filter((t) => !t.transfer_id);
+  const coveredSet = new Set(coveredExpenseIds);
+
+  // Confirmed: exclude employee expenses (affects_balance=false) — they show as sub-items under the reimbursement payment
+  const confirmed = transactions.filter(
+    (t) => t.is_confirmed && !(t.affects_balance === false && coveredSet.has(t.id)),
+  );
+
+  // Totals: exclude transfers AND employee expenses (affects_balance=false)
+  const nonTransfer = confirmed.filter((t) => !t.transfer_id && t.affects_balance !== false);
   const totalIncome = nonTransfer
     .filter((t) => t.kind === "income")
     .reduce((s, t) => s + Number(t.amount), 0);
@@ -301,6 +310,7 @@ export function TransactionsClient({ scope, transactions, accounts, categories, 
               tx={tx}
               onEdit={() => openEdit(tx)}
               onDelete={() => handleDelete(tx)}
+              reimbursementMeta={reimbursementByTxId[tx.id]}
             />
           ))}
         </div>
@@ -335,48 +345,94 @@ function TransactionRow({
   tx,
   onEdit,
   onDelete,
+  reimbursementMeta,
 }: {
   tx: TransactionRow;
   onEdit: () => void;
   onDelete: () => void;
+  reimbursementMeta?: ReimbursementMeta;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const isIncome = tx.kind === "income";
   const isTransfer = !!tx.transfer_id;
+  const isReimbursementPayment = !!reimbursementMeta;
   const accent = isTransfer ? "var(--color-primary)" : isIncome ? "var(--color-secondary-fixed)" : "var(--color-error)";
-  const catColor = isTransfer ? "var(--color-primary)" : (tx.category?.color ?? accent);
+  const catColor = isTransfer ? "var(--color-primary)" : isReimbursementPayment ? "var(--color-tertiary)" : (tx.category?.color ?? accent);
 
   const iconEl = (
     <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: catColor + "20" }}>
       <span className="material-symbols-outlined" style={{ fontSize: 18, color: catColor }}>
-        {isTransfer ? "swap_horiz" : (tx.category?.icon ?? (isIncome ? "trending_up" : "shopping_cart"))}
+        {isTransfer ? "swap_horiz" : isReimbursementPayment ? "payments" : (tx.category?.icon ?? (isIncome ? "trending_up" : "shopping_cart"))}
       </span>
     </div>
   );
   const descEl = (
     <div className="min-w-0">
-      <p className="text-body-sm text-on-surface truncate">
-        {tx.description || (isTransfer ? "Transferencia" : tx.category?.name) || "—"}
-      </p>
+      <div className="flex items-center gap-xs">
+        <p className="text-body-sm text-on-surface truncate">
+          {tx.description || (isTransfer ? "Transferencia" : tx.category?.name) || "—"}
+        </p>
+        {isReimbursementPayment && reimbursementMeta.code && (
+          <span className="text-label-md font-bold px-xs py-[2px] rounded-full shrink-0"
+            style={{ background: "var(--color-tertiary)20", color: "var(--color-tertiary)" }}>
+            {reimbursementMeta.code}
+          </span>
+        )}
+      </div>
       <p className="text-label-md text-on-surface-variant">
-        {isTransfer ? (isIncome ? "Transferencia entrante" : "Transferencia saliente") : tx.category?.name}
+        {isTransfer ? (isIncome ? "Transferencia entrante" : "Transferencia saliente") : isReimbursementPayment ? "Pago de reembolso" : tx.category?.name}
       </p>
     </div>
   );
   const badgeEl = (
     <>
-      {!isTransfer && tx.is_planned && <span className="text-label-md px-xs py-[2px] rounded-full shrink-0" style={{ background: "var(--color-primary)20", color: "var(--color-primary)" }}>previsto</span>}
+      {!isTransfer && !isReimbursementPayment && tx.is_planned && <span className="text-label-md px-xs py-[2px] rounded-full shrink-0" style={{ background: "var(--color-primary)20", color: "var(--color-primary)" }}>previsto</span>}
       {isTransfer && <span className="text-label-md px-xs py-[2px] rounded-full shrink-0" style={{ background: "var(--color-primary)20", color: "var(--color-primary)" }}>transferencia</span>}
-      {!isTransfer && tx.kind === "expense" && !tx.affects_balance && <span className="text-label-md px-xs py-[2px] rounded-full shrink-0" style={{ background: "var(--color-outline)20", color: "var(--color-outline)" }}>externo</span>}
+      {!isTransfer && !isReimbursementPayment && tx.kind === "expense" && !tx.affects_balance && <span className="text-label-md px-xs py-[2px] rounded-full shrink-0" style={{ background: "var(--color-outline)20", color: "var(--color-outline)" }}>externo</span>}
     </>
   );
   const actionsEl = (
     <div className="flex gap-xs">
+      {isReimbursementPayment && reimbursementMeta.items.length > 0 && (
+        <button type="button" onClick={() => setExpanded(!expanded)}
+          className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors" title="Ver gastos">
+          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>{expanded ? "expand_less" : "expand_more"}</span>
+        </button>
+      )}
       <button type="button" onClick={onEdit} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors" title="Editar">
         <span className="material-symbols-outlined" style={{ fontSize: 14 }}>edit</span>
       </button>
       <button type="button" onClick={onDelete} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors" title="Eliminar">
         <span className="material-symbols-outlined" style={{ fontSize: 14 }}>delete</span>
       </button>
+    </div>
+  );
+
+  const subItemsEl = isReimbursementPayment && expanded && reimbursementMeta.items.length > 0 && (
+    <div className="border-t border-outline-variant/10 px-lg py-sm flex flex-col gap-xs"
+      style={{ background: "var(--color-surface-container)" }}>
+      <p className="text-label-md text-on-surface-variant mb-xs">
+        {reimbursementMeta.items.length} gasto{reimbursementMeta.items.length !== 1 ? "s" : ""} incluido{reimbursementMeta.items.length !== 1 ? "s" : ""}
+      </p>
+      {reimbursementMeta.items.map((item) => {
+        const color = item.category?.color ?? "var(--color-outline)";
+        return (
+          <div key={item.transactionId} className="flex items-center gap-sm text-label-md">
+            <div className="w-6 h-6 rounded flex items-center justify-center shrink-0" style={{ background: color + "20" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 12, color }}>
+                {item.category?.icon ?? "receipt"}
+              </span>
+            </div>
+            <span className="flex-1 text-on-surface truncate">
+              {item.description || item.category?.name || "Gasto"}
+            </span>
+            <span className="text-on-surface-variant shrink-0">{formatDay(item.occurred_on)}</span>
+            <span className="font-bold shrink-0" style={{ color: "var(--color-error)" }}>
+              -{formatCurrency(item.amount)}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 
@@ -404,6 +460,12 @@ function TransactionRow({
             <p className="text-body-sm text-on-surface truncate">
               {tx.description || (isTransfer ? "Transferencia" : tx.category?.name) || "—"}
             </p>
+            {isReimbursementPayment && reimbursementMeta.code && (
+              <span className="text-label-md font-bold px-xs py-[2px] rounded-full shrink-0"
+                style={{ background: "var(--color-tertiary)20", color: "var(--color-tertiary)" }}>
+                {reimbursementMeta.code}
+              </span>
+            )}
             {badgeEl}
           </div>
           <div className="flex items-center gap-xs mt-[2px]">
@@ -420,6 +482,8 @@ function TransactionRow({
           <div className="flex gap-xs">{actionsEl}</div>
         </div>
       </div>
+
+      {subItemsEl}
     </div>
   );
 }

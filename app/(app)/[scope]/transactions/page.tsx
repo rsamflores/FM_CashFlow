@@ -5,6 +5,7 @@ import { getTransactionsForMonth } from "@/lib/actions/transactions";
 import { getAccounts, getPersonalCashAccounts } from "@/lib/actions/accounts";
 import type { AccountRow } from "@/lib/actions/accounts";
 import { getCategories } from "@/lib/actions/categories";
+import { getPaidReimbursementsForTransactions, type ReimbursementMeta } from "@/lib/actions/reimbursements";
 import { TransactionsClient } from "./TransactionsClient";
 
 export default async function TransactionsPage({
@@ -23,13 +24,22 @@ export default async function TransactionsPage({
   const selectedMonth = sp.month ?? currentMonth;
 
   const otherScope = scope === "personal" ? "business" : "personal";
-  const [transactions, accounts, categories, personalCashAccounts, otherAccounts] = await Promise.all([
+  const [transactions, accounts, categories, personalCashAccounts, otherAccounts, reimbursementByTxId] = await Promise.all([
     getTransactionsForMonth(scope, selectedMonth),
     getAccounts(scope),
     getCategories(scope),
     scope === "business" ? getPersonalCashAccounts() : Promise.resolve([] as AccountRow[]),
     getAccounts(otherScope),
+    scope === "business" ? getPaidReimbursementsForTransactions(scope) : Promise.resolve({} as Record<string, ReimbursementMeta>),
   ]);
+
+  // Set of employee expense IDs already covered by a paid reimbursement (hide from main list)
+  const coveredExpenseIds: string[] = [];
+  for (const meta of Object.values(reimbursementByTxId)) {
+    for (const item of meta.items) {
+      coveredExpenseIds.push(item.transactionId);
+    }
+  }
 
   const allAccounts = [...accounts, ...otherAccounts];
   const taxAccounts = allAccounts.filter((a) => a.is_tax_account);
@@ -65,6 +75,8 @@ export default async function TransactionsPage({
         creditCardAccounts={creditCardAccounts}
         selectedMonth={selectedMonth}
         currentMonth={currentMonth}
+        reimbursementByTxId={reimbursementByTxId}
+        coveredExpenseIds={coveredExpenseIds}
       />
     </>
   );
