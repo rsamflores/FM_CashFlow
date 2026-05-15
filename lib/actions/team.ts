@@ -86,19 +86,25 @@ export async function inviteMember(formData: FormData) {
   // Upsert memberships for each scope
   // If user already has an account, mark as accepted immediately (no email flow needed)
   const now = new Date().toISOString();
-  for (const scope of scopes) {
-    const { error } = await admin.from("memberships").upsert(
-      {
-        user_id: targetUserId,
-        scope,
-        role,
-        invited_email: email,
-        invited_at: now,
-        ...(userAlreadyExists ? { accepted_at: now } : {}),
-      },
-      { onConflict: "user_id,scope" },
-    );
-    if (error) return { error: error.message };
+  const allScopes: Scope[] = ["personal", "business"];
+  for (const scope of allScopes) {
+    if (scopes.includes(scope)) {
+      const { error } = await admin.from("memberships").upsert(
+        {
+          user_id: targetUserId,
+          scope,
+          role,
+          invited_email: email,
+          invited_at: now,
+          ...(userAlreadyExists ? { accepted_at: now } : {}),
+        },
+        { onConflict: "user_id,scope" },
+      );
+      if (error) return { error: error.message };
+    } else if (userAlreadyExists) {
+      // Remove memberships for scopes not included in this invitation
+      await admin.from("memberships").delete().eq("user_id", targetUserId).eq("scope", scope);
+    }
   }
 
   revalidatePath("/settings/team");
