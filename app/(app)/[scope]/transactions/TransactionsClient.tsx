@@ -1,0 +1,550 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { TransactionDialog } from "@/components/forms/TransactionDialog";
+import { TransferDialog } from "@/components/forms/TransferDialog";
+import { deleteTransaction, confirmTransaction, generateRetroactiveIvaTransfers, type TransactionRow } from "@/lib/actions/transactions";
+import type { AccountRow } from "@/lib/actions/accounts";
+import type { CategoryRow } from "@/lib/actions/categories";
+import { formatCurrency, formatDay, formatMonth } from "@/lib/format";
+import type { Scope } from "@/lib/scope";
+
+type Props = {
+  scope: Scope;
+  transactions: TransactionRow[];
+  accounts: AccountRow[];
+  categories: CategoryRow[];
+  usedByAccount: Record<string, number>;
+  personalCashAccounts?: AccountRow[];
+  allAccounts?: AccountRow[];
+  taxAccounts?: AccountRow[];
+  creditCardAccounts?: AccountRow[];
+  selectedMonth: string;
+  currentMonth: string;
+};
+
+export function TransactionsClient({ scope, transactions, accounts, categories, usedByAccount, personalCashAccounts = [], allAccounts = [], taxAccounts = [], creditCardAccounts = [], selectedMonth, currentMonth }: Props) {
+  const router = useRouter();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [editTx, setEditTx] = useState<TransactionRow | undefined>();
+  const [editTransfer, setEditTransfer] = useState<TransactionRow | undefined>();
+  const [editTransferTo, setEditTransferTo] = useState<TransactionRow | undefined>();
+  const [defaultKind, setDefaultKind] = useState<"income" | "expense">("expense");
+  const [retroIvaLoading, setRetroIvaLoading] = useState(false);
+  const [retroIvaResult, setRetroIvaResult] = useState<{ created?: number; error?: string } | null>(null);
+
+  function openCreate(kind: "income" | "expense" = "expense") {
+    setEditTx(undefined);
+    setDefaultKind(kind);
+    setDialogOpen(true);
+  }
+
+  function openEdit(tx: TransactionRow) {
+    setEditTx(tx);
+    setDialogOpen(true);
+  }
+
+  async function handleDelete(tx: TransactionRow) {
+    if (!confirm("¿Eliminar esta transacción?")) return;
+    await deleteTransaction(tx.id, scope);
+  }
+
+  async function handleConfirm(tx: TransactionRow) {
+    await confirmTransaction(tx.id, scope);
+  }
+
+  function openEditTransfer(tx: TransactionRow) {
+    const toTx = transactions.find(
+      (t) => t.transfer_id === tx.transfer_id && t.kind === "income"
+    );
+    setEditTransfer(tx);
+    setEditTransferTo(toTx);
+    setTransferOpen(true);
+  }
+
+  function closeTransferDialog() {
+    setTransferOpen(false);
+    setEditTransfer(undefined);
+    setEditTransferTo(undefined);
+  }
+
+  function navigateMonth(direction: -1 | 1) {
+    const [y, m] = selectedMonth.split("-").map(Number);
+    const newDate = new Date(y, m - 1 + direction, 1);
+    const newMonth = `${newDate.getFullYear()}-${String(newDate.getMonth() + 1).padStart(2, "0")}`;
+    router.push(`/${scope}/transactions?month=${newMonth}`);
+  }
+
+  const isCurrentMonth = selectedMonth === currentMonth;
+  const monthLabel = formatMonth(`${selectedMonth}-01`);
+
+  const pending = transactions
+    .filter((t) => !t.is_confirmed)
+    .sort((a, b) => a.occurred_on.localeCompare(b.occurred_on));
+  const confirmed = transactions.filter((t) => t.is_confirmed);
+
+  // Exclude transfers from income/expense totals
+  const nonTransfer = confirmed.filter((t) => !t.transfer_id);
+  const totalIncome = nonTransfer
+    .filter((t) => t.kind === "income")
+    .reduce((s, t) => s + Number(t.amount), 0);
+  const totalExpense = nonTransfer
+    .filter((t) => t.kind === "expense")
+    .reduce((s, t) => s + Number(t.amount), 0);
+
+  return (
+    <>
+      {/* Header */}
+      <header className="mb-lg">
+        <div className="flex items-center justify-between gap-md mb-sm">
+          {/* Month navigator */}
+          <div className="flex items-center gap-xs">
+            <button
+              type="button"
+              onClick={() => navigateMonth(-1)}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 20 }}>chevron_left</span>
+            </button>
+            <span className="text-title-md text-on-surface capitalize" style={{ minWidth: 160, textAlign: "center" }}>
+              {monthLabel}
+            </span>
+            <button
+              type="button"
+              onClick={() => navigateMonth(1)}
+              disabled={isCurrentMonth}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors disabled:opacity-30"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 20 }}>chevron_right</span>
+            </button>
+            {!isCurrentMonth && (
+              <button
+                type="button"
+                onClick={() => router.push(`/${scope}/transactions`)}
+                className="h-7 px-sm rounded-full text-label-md font-bold transition-colors"
+                style={{ background: "var(--color-primary-container)30", color: "var(--color-primary)" }}
+              >
+                Hoy
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => openCreate()}
+            className="flex items-center gap-xs h-10 px-lg rounded-full bg-primary-container text-on-primary-container font-bold hover:opacity-90 transition-opacity text-body-sm shrink-0"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
+            Nueva transacción
+          </button>
+        </div>
+        <p className="text-body-sm text-on-surface-variant">
+          <span className="text-secondary font-bold">+{formatCurrency(totalIncome)}</span>
+          {" · "}
+          <span className="text-error font-bold">-{formatCurrency(totalExpense)}</span>
+          {" · "}
+          <span className={`font-bold ${totalIncome - totalExpense >= 0 ? "text-on-surface" : "text-error"}`}>
+            Neto {formatCurrency(totalIncome - totalExpense)}
+          </span>
+        </p>
+      </header>
+
+      {/* Quick kind buttons */}
+      <div className="flex gap-sm mb-lg">
+        <button
+          type="button"
+          onClick={() => openCreate("income")}
+          className="flex items-center gap-xs h-9 px-md rounded-full text-body-sm font-bold transition-colors"
+          style={{ background: "var(--color-secondary-container)20", color: "var(--color-secondary-fixed)" }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
+          Ingreso
+        </button>
+        <button
+          type="button"
+          onClick={() => openCreate("expense")}
+          className="flex items-center gap-xs h-9 px-md rounded-full text-body-sm font-bold transition-colors"
+          style={{ background: "var(--color-error-container)20", color: "var(--color-error)" }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>remove</span>
+          Egreso
+        </button>
+        <button
+          type="button"
+          onClick={() => { setEditTransfer(undefined); setEditTransferTo(undefined); setTransferOpen(true); }}
+          className="flex items-center gap-xs h-9 px-md rounded-full text-body-sm font-bold transition-colors"
+          style={{ background: "var(--color-primary-container)20", color: "var(--color-primary)" }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>swap_horiz</span>
+          Transferencia
+        </button>
+      </div>
+
+      {/* Retroactive IVA banner — business scope only, shown until dismissed */}
+      {scope === "business" && retroIvaResult === null && (
+        <div className="mb-lg rounded-2xl border p-md flex items-center gap-md"
+          style={{ borderColor: "var(--color-tertiary-container)", background: "var(--color-tertiary-container)12" }}>
+          <span className="material-symbols-outlined shrink-0" style={{ fontSize: 22, color: "var(--color-tertiary-fixed)" }}>receipt_long</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-body-sm font-bold" style={{ color: "var(--color-tertiary-fixed)" }}>Generar IVA retroactivo</p>
+            <p className="text-label-md text-on-surface-variant">Crea las transferencias de IVA pendientes para los ingresos existentes</p>
+          </div>
+          <button
+            type="button"
+            disabled={retroIvaLoading}
+            onClick={async () => {
+              setRetroIvaLoading(true);
+              const res = await generateRetroactiveIvaTransfers();
+              setRetroIvaResult(res as { created?: number; error?: string });
+              setRetroIvaLoading(false);
+            }}
+            className="shrink-0 h-9 px-md rounded-full text-body-sm font-bold transition-opacity disabled:opacity-50"
+            style={{ background: "var(--color-tertiary-container)", color: "var(--color-on-tertiary-container)" }}
+          >
+            {retroIvaLoading ? "Procesando…" : "Ejecutar"}
+          </button>
+          <button type="button" onClick={() => setRetroIvaResult({ created: 0 })} className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant">
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+          </button>
+        </div>
+      )}
+
+      {retroIvaResult && (
+        <div className="mb-lg rounded-2xl border p-md flex items-center gap-md"
+          style={{
+            borderColor: retroIvaResult.error ? "var(--color-error)" : "var(--color-secondary-container)",
+            background: retroIvaResult.error ? "var(--color-error-container)20" : "var(--color-secondary-container)20",
+          }}>
+          <span className="material-symbols-outlined shrink-0" style={{ fontSize: 20, color: retroIvaResult.error ? "var(--color-error)" : "var(--color-secondary-fixed)" }}>
+            {retroIvaResult.error ? "error" : "check_circle"}
+          </span>
+          <p className="text-body-sm flex-1" style={{ color: retroIvaResult.error ? "var(--color-error)" : "var(--color-secondary-fixed)" }}>
+            {retroIvaResult.error ?? `${retroIvaResult.created} transferencias de IVA generadas correctamente`}
+          </p>
+          <button type="button" onClick={() => setRetroIvaResult(null)} className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant">
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+          </button>
+        </div>
+      )}
+
+      {/* Pending income (non-transfer) */}
+      {pending.filter(t => t.kind === "income" && !t.transfer_id).length > 0 && (
+        <div className="mb-lg rounded-2xl border border-primary/30 bg-surface-container-low overflow-hidden">
+          <div className="flex items-center gap-sm px-lg py-md border-b border-primary/20"
+            style={{ background: "var(--color-primary)08" }}>
+            <span className="material-symbols-outlined text-primary" style={{ fontSize: 20 }}>schedule</span>
+            <h3 className="text-body-sm font-bold text-primary flex-1">
+              Ingresos por confirmar ({pending.filter(t => t.kind === "income" && !t.transfer_id).length})
+            </h3>
+            <p className="text-label-md text-on-surface-variant">Marca como recibido para sumar al saldo</p>
+          </div>
+          {pending.filter(t => t.kind === "income" && !t.transfer_id).map((tx) => (
+            <PendingRow key={tx.id} tx={tx} onConfirm={() => handleConfirm(tx)} onDelete={() => handleDelete(tx)} onEdit={() => openEdit(tx)} />
+          ))}
+        </div>
+      )}
+
+      {/* Pending expenses (non-transfer) */}
+      {pending.filter(t => t.kind === "expense" && !t.transfer_id).length > 0 && (
+        <div className="mb-lg rounded-2xl border border-error/30 bg-surface-container-low overflow-hidden">
+          <div className="flex items-center gap-sm px-lg py-md border-b border-error/20"
+            style={{ background: "var(--color-error)08" }}>
+            <span className="material-symbols-outlined text-error" style={{ fontSize: 20 }}>payments</span>
+            <h3 className="text-body-sm font-bold text-error flex-1">
+              Egresos por pagar ({pending.filter(t => t.kind === "expense" && !t.transfer_id).length})
+            </h3>
+            <p className="text-label-md text-on-surface-variant">Confirma el pago para debitar la cuenta</p>
+          </div>
+          {pending.filter(t => t.kind === "expense" && !t.transfer_id).map((tx) => (
+            <PendingRow key={tx.id} tx={tx} onConfirm={() => handleConfirm(tx)} onDelete={() => handleDelete(tx)} onEdit={() => openEdit(tx)} />
+          ))}
+        </div>
+      )}
+
+      {/* Pending transfers — show only the expense leg (source) to avoid duplicates */}
+      {pending.filter(t => t.transfer_id && t.kind === "expense").length > 0 && (
+        <div className="mb-lg rounded-2xl border border-primary/30 bg-surface-container-low overflow-hidden"
+          style={{ borderColor: "var(--color-tertiary-container)" }}>
+          <div className="flex items-center gap-sm px-lg py-md border-b"
+            style={{ borderColor: "var(--color-tertiary-container)", background: "var(--color-tertiary-container)15" }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 20, color: "var(--color-tertiary-fixed)" }}>swap_horiz</span>
+            <h3 className="text-body-sm font-bold flex-1" style={{ color: "var(--color-tertiary-fixed)" }}>
+              Transferencias pendientes ({pending.filter(t => t.transfer_id && t.kind === "expense").length})
+            </h3>
+            <p className="text-label-md text-on-surface-variant">Confirma para mover el dinero entre cuentas</p>
+          </div>
+          {pending.filter(t => t.transfer_id && t.kind === "expense").map((tx) => (
+            <PendingRow key={tx.id} tx={tx} onConfirm={() => handleConfirm(tx)} onDelete={() => handleDelete(tx)} onEdit={() => openEditTransfer(tx)} />
+          ))}
+        </div>
+      )}
+
+      {/* List */}
+      {confirmed.length === 0 && pending.length === 0 ? (
+        <EmptyTransactions onAdd={() => openCreate()} />
+      ) : confirmed.length === 0 ? null : (
+        <div className="bg-surface-container-low rounded-2xl border border-outline-variant/10 overflow-hidden">
+          {/* Table header */}
+          <div className="grid px-lg py-sm border-b border-outline-variant/10"
+            style={{ gridTemplateColumns: "1fr 140px 130px 100px 72px" }}>
+            <span className="text-label-md text-on-surface-variant">Descripción / Categoría</span>
+            <span className="text-label-md text-on-surface-variant">Cuenta</span>
+            <span className="text-label-md text-on-surface-variant">Fecha</span>
+            <span className="text-label-md text-on-surface-variant text-right">Monto</span>
+            <span />
+          </div>
+
+          {confirmed.map((tx) => (
+            <TransactionRow
+              key={tx.id}
+              tx={tx}
+              onEdit={() => openEdit(tx)}
+              onDelete={() => handleDelete(tx)}
+            />
+          ))}
+        </div>
+      )}
+
+      <TransactionDialog
+        scope={scope}
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        accounts={accounts}
+        categories={categories}
+        usedByAccount={usedByAccount}
+        editTransaction={editTx}
+        defaultKind={defaultKind}
+        personalCashAccounts={personalCashAccounts}
+        taxAccounts={taxAccounts}
+        creditCardAccounts={creditCardAccounts}
+      />
+
+      <TransferDialog
+        open={transferOpen}
+        onClose={closeTransferDialog}
+        allAccounts={allAccounts}
+        editTransfer={editTransfer}
+        editTransferTo={editTransferTo}
+      />
+    </>
+  );
+}
+
+function TransactionRow({
+  tx,
+  onEdit,
+  onDelete,
+}: {
+  tx: TransactionRow;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const isIncome = tx.kind === "income";
+  const isTransfer = !!tx.transfer_id;
+  const accent = isTransfer ? "var(--color-primary)" : isIncome ? "var(--color-secondary-fixed)" : "var(--color-error)";
+  const catColor = isTransfer ? "var(--color-primary)" : (tx.category?.color ?? accent);
+
+  return (
+    <div
+      className="grid px-lg py-sm items-center hover:bg-surface-container transition-colors border-t border-outline-variant/10"
+      style={{ gridTemplateColumns: "1fr 140px 130px 100px 72px" }}
+    >
+      {/* Description + category */}
+      <div className="flex items-center gap-sm min-w-0">
+        <div
+          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background: catColor + "20" }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 18, color: catColor }}>
+            {isTransfer ? "swap_horiz" : (tx.category?.icon ?? (isIncome ? "trending_up" : "shopping_cart"))}
+          </span>
+        </div>
+        <div className="min-w-0">
+          <p className="text-body-sm text-on-surface truncate">
+            {tx.description || (isTransfer ? "Transferencia" : tx.category?.name) || "—"}
+          </p>
+          <p className="text-label-md text-on-surface-variant">
+            {isTransfer ? (isIncome ? "Transferencia entrante" : "Transferencia saliente") : tx.category?.name}
+          </p>
+        </div>
+        {!isTransfer && tx.is_planned && (
+          <span
+            className="text-label-md px-xs py-[2px] rounded-full shrink-0"
+            style={{ background: "var(--color-primary)20", color: "var(--color-primary)" }}
+          >
+            previsto
+          </span>
+        )}
+        {isTransfer && (
+          <span
+            className="text-label-md px-xs py-[2px] rounded-full shrink-0"
+            style={{ background: "var(--color-primary)20", color: "var(--color-primary)" }}
+          >
+            transferencia
+          </span>
+        )}
+        {!isTransfer && tx.kind === "expense" && !tx.affects_balance && (
+          <span
+            className="text-label-md px-xs py-[2px] rounded-full shrink-0"
+            style={{ background: "var(--color-outline)20", color: "var(--color-outline)" }}
+          >
+            externo
+          </span>
+        )}
+      </div>
+
+      {/* Account */}
+      <div className="flex items-center gap-xs">
+        <div
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{ background: tx.account?.color ?? "var(--color-outline)" }}
+        />
+        <span className="text-body-sm text-on-surface-variant truncate">{tx.account?.name ?? "—"}</span>
+      </div>
+
+      {/* Date */}
+      <span className="text-body-sm text-on-surface-variant">{formatDay(new Date(tx.occurred_on))}</span>
+
+      {/* Amount */}
+      <span
+        className="text-body-sm font-bold text-right"
+        style={{ color: accent }}
+      >
+        {isTransfer ? "" : (isIncome ? "+" : "-")}{formatCurrency(tx.amount)}
+      </span>
+
+      {/* Actions */}
+      <div className="flex gap-xs justify-end">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors"
+          title="Editar"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>edit</span>
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors"
+          title="Eliminar"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>delete</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PendingRow({
+  tx,
+  onConfirm,
+  onDelete,
+  onEdit,
+}: {
+  tx: TransactionRow;
+  onConfirm: () => void;
+  onDelete: () => void;
+  onEdit: () => void;
+}) {
+  const isExpense = tx.kind === "expense";
+  const isTransfer = !!tx.transfer_id;
+  const catColor = isTransfer
+    ? "var(--color-tertiary-fixed)"
+    : tx.category?.color ?? (isExpense ? "var(--color-error)" : "var(--color-secondary-fixed)");
+
+  const btnStyle = isTransfer
+    ? { background: "var(--color-tertiary-container)", color: "var(--color-on-tertiary-container)" }
+    : isExpense
+    ? { background: "var(--color-error-container)", color: "var(--color-on-error-container)" }
+    : { background: "var(--color-secondary-container)", color: "var(--color-on-secondary-container)" };
+
+  const btnIcon = isTransfer ? "check_circle" : isExpense ? "payments" : "check_circle";
+  const btnLabel = isTransfer ? "Realizada" : isExpense ? "Pagado" : "Recibido";
+  const amountColor = isTransfer
+    ? "var(--color-primary)"
+    : isExpense ? "var(--color-error)" : "var(--color-secondary-fixed)";
+
+  return (
+    <div className="flex items-center gap-md px-lg py-sm border-t border-outline-variant/10 hover:bg-surface-container transition-colors">
+      <div
+        className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+        style={{ background: catColor + "20" }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 18, color: catColor }}>
+          {isTransfer ? "swap_horiz" : tx.category?.icon ?? (isExpense ? "trending_down" : "trending_up")}
+        </span>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-body-sm text-on-surface font-bold truncate">
+          {tx.description || (isTransfer ? "Transferencia" : tx.category?.name) || "—"}
+        </p>
+        <p className="text-label-md text-on-surface-variant">
+          {tx.account?.name} · {formatDay(tx.occurred_on)}
+          {tx.recurring_rule_id && (
+            <span className="ml-xs font-bold" style={{ color: "var(--color-primary)" }}>
+              · día {new Date(tx.occurred_on + "T12:00:00").getDate()} de cada mes
+            </span>
+          )}
+        </p>
+      </div>
+      <span className="text-body-sm font-bold shrink-0" style={{ color: amountColor }}>
+        {isTransfer ? "" : isExpense ? "-" : "+"}{formatCurrency(tx.amount)}
+      </span>
+      <button
+        type="button"
+        onClick={onConfirm}
+        className="flex items-center gap-xs h-8 px-md rounded-full text-body-sm font-bold transition-colors shrink-0"
+        style={btnStyle}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{btnIcon}</span>
+        {btnLabel}
+      </button>
+      <button
+        type="button"
+        onClick={onEdit}
+        className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors shrink-0"
+        title="Editar"
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 14 }}>edit</span>
+      </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors shrink-0"
+        title="Eliminar"
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 14 }}>delete</span>
+      </button>
+    </div>
+  );
+}
+
+function EmptyTransactions({ onAdd }: { onAdd: () => void }) {
+  return (
+    <section
+      className="flex flex-col items-center justify-center text-center py-xl mx-auto"
+      style={{ maxWidth: 480 }}
+    >
+      <div className="w-48 h-48 bg-surface-container-low rounded-full flex items-center justify-center mb-lg relative">
+        <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 to-transparent rounded-full blur-3xl" />
+        <span className="material-symbols-outlined text-outline/30" style={{ fontSize: 96 }}>
+          receipt_long
+        </span>
+      </div>
+      <h3 className="text-headline-lg-mobile text-on-surface mb-sm">Sin transacciones aún</h3>
+      <p className="text-body-sm text-on-surface-variant mb-lg" style={{ maxWidth: 360 }}>
+        Registra tu primer ingreso o egreso para empezar a ver tu flujo de dinero.
+      </p>
+      <button
+        type="button"
+        onClick={onAdd}
+        className="inline-flex items-center gap-xs h-10 px-lg rounded-full bg-primary-container text-on-primary-container font-bold hover:opacity-90 transition-opacity"
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
+        Nueva transacción
+      </button>
+    </section>
+  );
+}
