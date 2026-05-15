@@ -62,8 +62,13 @@ export default async function DashboardPage({
   const totalBalance = nonCreditAccounts
     .reduce((s, a) => s + Number(a.opening_balance) + (netByAccount[a.id] ?? 0), 0);
 
-  // Current month confirmed transactions
-  const thisMonthConfirmed = confirmed.filter((tx) => tx.occurred_on >= currentMonthStr);
+  const nextMonthDate = new Date(year, month + 1, 1);
+  const nextMonthStr = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, "0")}-01`;
+
+  // Current month confirmed transactions (strict bounds: excludes future months)
+  const thisMonthConfirmed = confirmed.filter((tx) =>
+    tx.occurred_on >= currentMonthStr && tx.occurred_on < nextMonthStr
+  );
   const monthIncome = thisMonthConfirmed
     .filter((t) => t.kind === "income")
     .reduce((s, t) => s + Number(t.amount), 0);
@@ -78,8 +83,6 @@ export default async function DashboardPage({
 
   // ── MONTHLY PROJECTION ────────────────────────────────────────────────────
   // Pending income = unconfirmed income due within the current month only
-  const nextMonthDate = new Date(year, month + 1, 1);
-  const nextMonthStr = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, "0")}-01`;
 
   const pendingIncomeByAccount: Record<string, number> = {};
   for (const tx of pending.filter((t) =>
