@@ -325,6 +325,106 @@ export function DashboardClient({
                 </div>
               );
             })}
+
+            {/* Global totals card */}
+            {(() => {
+              const totalCurrent = accountProjections.filter(a => !a.isCashTransfer).reduce((s, a) => s + a.currentBalance, 0);
+              const totalPending = accountProjections.reduce((s, a) => s + a.pendingIncome, 0);
+              const totalTransferIn = accountProjections.reduce((s, a) => s + a.pendingTransferIn, 0);
+              const totalTransferOut = accountProjections.reduce((s, a) => s + a.pendingTransferOut, 0);
+              const totalProjectedAvail = totalCurrent + totalPending + totalTransferIn - totalTransferOut;
+              const totalBudgetDebit = accountProjections.reduce((s, a) => s + a.budgetDebit, 0);
+              const totalRemainder = accountProjections.reduce((s, a) => s + a.projected, 0);
+              const remainderColor = totalRemainder >= 0 ? "var(--color-secondary-fixed)" : "var(--color-error)";
+              const accentColor = "var(--color-primary)";
+              return (
+                <div className="md:col-span-2 rounded-2xl border border-outline-variant/10 overflow-hidden" style={{ background: "var(--color-primary)08" }}>
+                  <div className="flex items-center gap-sm px-md py-sm border-b border-outline-variant/10" style={{ background: "var(--color-primary)18" }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 16, color: accentColor }}>summarize</span>
+                    <p className="text-body-sm font-bold text-on-surface flex-1">Total consolidado — todas las cuentas</p>
+                  </div>
+                  <div className="px-md py-sm grid grid-cols-1 sm:grid-cols-2 gap-x-xl gap-y-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
+                        <span className="material-symbols-outlined" style={{ fontSize: 13 }}>account_balance_wallet</span>
+                        Saldo actual total
+                      </span>
+                      <span className="text-body-sm text-on-surface">{formatCurrency(totalCurrent)}</span>
+                    </div>
+
+                    {totalPending > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
+                          <span className="material-symbols-outlined" style={{ fontSize: 13 }}>schedule</span>
+                          + Ingresos pendientes
+                        </span>
+                        <span className="text-body-sm font-bold" style={{ color: "var(--color-tertiary)" }}>
+                          +{formatCurrency(totalPending)}
+                        </span>
+                      </div>
+                    )}
+
+                    {totalTransferIn > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
+                          <span className="material-symbols-outlined" style={{ fontSize: 13 }}>swap_horiz</span>
+                          + Transferencias entrantes
+                        </span>
+                        <span className="text-body-sm font-bold" style={{ color: "var(--color-tertiary)" }}>
+                          +{formatCurrency(totalTransferIn)}
+                        </span>
+                      </div>
+                    )}
+
+                    {totalTransferOut > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
+                          <span className="material-symbols-outlined" style={{ fontSize: 13 }}>swap_horiz</span>
+                          − Transferencias pendientes
+                        </span>
+                        <span className="text-body-sm font-bold" style={{ color: "var(--color-error)" }}>
+                          −{formatCurrency(totalTransferOut)}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
+                        <span className="material-symbols-outlined" style={{ fontSize: 13 }}>savings</span>
+                        = Proyectado disponible
+                      </span>
+                      <span className="text-body-sm font-bold text-on-surface">{formatCurrency(totalProjectedAvail)}</span>
+                    </div>
+
+                    {totalBudgetDebit > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
+                          <span className="material-symbols-outlined" style={{ fontSize: 13 }}>shopping_bag</span>
+                          − Presupuesto por ejecutar
+                        </span>
+                        <span className="text-body-sm font-bold" style={{ color: "var(--color-error)" }}>
+                          −{formatCurrency(totalBudgetDebit)}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="sm:col-span-2 h-px my-xs" style={{ background: "var(--color-primary)30" }} />
+
+                    <div className="sm:col-span-2 flex items-center justify-between">
+                      <span className="text-body-sm font-bold flex items-center gap-xs" style={{ color: remainderColor }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 15 }}>
+                          {totalRemainder >= 0 ? "check_circle" : "warning"}
+                        </span>
+                        = Remanente al cierre
+                      </span>
+                      <span className="text-title-md font-bold" style={{ color: remainderColor }}>
+                        {formatCurrency(totalRemainder)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
