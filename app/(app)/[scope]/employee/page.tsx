@@ -79,6 +79,7 @@ export default async function EmployeePage({
           .eq("scope", scope)
           .eq("kind", "expense")
           .eq("is_confirmed", true)
+          .eq("created_by", user.id)
           .gte("occurred_on", currentMonth)
           .lt("occurred_on", (() => {
             const d = new Date(currentMonth + "T00:00:00");

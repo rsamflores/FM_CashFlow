@@ -23,6 +23,7 @@ type Props = {
   forceAffectsBalance?: boolean;
   filteredCategoryIds?: string[];
   lockedAccountId?: string;
+  lockedKind?: "income" | "expense";
 };
 
 export function TransactionDialog({
@@ -41,6 +42,7 @@ export function TransactionDialog({
   forceAffectsBalance = false,
   filteredCategoryIds,
   lockedAccountId,
+  lockedKind,
 }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -48,7 +50,7 @@ export function TransactionDialog({
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/El_Salvador" });
 
   // All fields are controlled so edit pre-fill works reliably
-  const [kind, setKind] = useState<"income" | "expense">(editTransaction?.kind ?? defaultKind);
+  const [kind, setKind] = useState<"income" | "expense">(lockedKind ?? editTransaction?.kind ?? defaultKind);
   const [amount, setAmount] = useState(editTransaction?.amount?.toString() ?? "");
   const [occurredOn, setOccurredOn] = useState(editTransaction?.occurred_on ?? today);
   const [selectedAccountId, setSelectedAccountId] = useState(lockedAccountId ?? editTransaction?.account_id ?? "");
@@ -66,7 +68,7 @@ export function TransactionDialog({
   // Reset all fields when the dialog opens (handles both new and edit)
   useEffect(() => {
     if (open) {
-      setKind(editTransaction?.kind ?? defaultKind);
+      setKind(lockedKind ?? editTransaction?.kind ?? defaultKind);
       setAmount(editTransaction?.amount?.toString() ?? "");
       setOccurredOn(editTransaction?.occurred_on ?? today);
       setSelectedAccountId(lockedAccountId ?? editTransaction?.account_id ?? "");
@@ -191,8 +193,8 @@ export function TransactionDialog({
         </div>
 
         <form onSubmit={handleSubmit} className="p-lg flex flex-col gap-lg">
-          {/* Kind toggle */}
-          <div className="flex bg-surface-container-high rounded-full p-xs gap-xs">
+          {/* Kind toggle — hidden when kind is locked */}
+          {!lockedKind && <div className="flex bg-surface-container-high rounded-full p-xs gap-xs">
             {(["expense", "income"] as const).map((k) => (
               <button
                 key={k}
@@ -215,7 +217,7 @@ export function TransactionDialog({
                 {k === "income" ? "Ingreso" : "Egreso"}
               </button>
             ))}
-          </div>
+          </div>}
 
           {/* Amount */}
           <div className="flex flex-col gap-xs">

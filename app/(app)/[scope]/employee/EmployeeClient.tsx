@@ -307,7 +307,7 @@ export function EmployeeClient({
         forceAffectsBalance
         filteredCategoryIds={assignedCategoryIds}
         lockedAccountId={accounts[0]?.id}
-        defaultKind="expense"
+        lockedKind="expense"
       />
 
       {/* Reimbursement Dialog */}
