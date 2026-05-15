@@ -78,9 +78,15 @@ export async function inviteMember(formData: FormData) {
     targetUserId = existing.id;
     userAlreadyExists = true;
   } else {
-    const { data: invited, error: invErr } = await admin.auth.admin.inviteUserByEmail(email);
+    // Create user directly with email pre-confirmed — no confirmation email required
+    const { data: created, error: invErr } = await admin.auth.admin.createUser({
+      email,
+      email_confirm: true,
+      user_metadata: {},
+    });
     if (invErr) return { error: invErr.message };
-    targetUserId = invited.user.id;
+    targetUserId = created.user.id;
+    userAlreadyExists = false;
   }
 
   // Upsert memberships for each scope

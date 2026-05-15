@@ -69,13 +69,21 @@ export async function signup(
     return { error: "La contraseña debe tener al menos 8 caracteres" };
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: { data: { full_name: fullName } },
   });
 
   if (error) return { error: error.message };
+
+  // Auto-confirm email so user can log in immediately without clicking a confirmation link
+  if (data.user) {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createAdminClient();
+    await admin.auth.admin.updateUserById(data.user.id, { email_confirm: true });
+  }
+
   redirect("/personal/dashboard");
 }
 
