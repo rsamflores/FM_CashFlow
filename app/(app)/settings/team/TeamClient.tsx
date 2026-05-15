@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { updateMemberRole, removeMember, type MemberRow } from "@/lib/actions/team";
 import { InviteDialog } from "@/components/forms/InviteDialog";
+import { EditPermissionsDialog } from "@/components/forms/EditPermissionsDialog";
 
 const ROLE_LABEL: Record<MemberRow["role"], string> = {
   owner: "Propietario",
@@ -39,6 +40,7 @@ type GroupedMember = {
 
 export function TeamClient({ members, currentUserId }: Props) {
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [editUser, setEditUser] = useState<GroupedMember | null>(null);
 
   // Group by user
   const grouped = new Map<string, GroupedMember>();
@@ -120,11 +122,23 @@ export function TeamClient({ members, currentUserId }: Props) {
             user={user}
             isCurrentUser={user.user_id === currentUserId}
             allMembers={members}
+            onEdit={() => setEditUser(user)}
           />
         ))}
       </div>
 
       <InviteDialog open={inviteOpen} onClose={() => setInviteOpen(false)} />
+
+      {editUser && (
+        <EditPermissionsDialog
+          open={!!editUser}
+          onClose={() => setEditUser(null)}
+          userId={editUser.user_id}
+          displayName={editUser.full_name ?? editUser.email ?? "—"}
+          currentRole={(editUser.scopes[0]?.role ?? "viewer") as "editor" | "viewer" | "recorder"}
+          currentScopes={editUser.scopes.map((s) => s.scope)}
+        />
+      )}
     </>
   );
 }
@@ -133,10 +147,12 @@ function MemberRow({
   user,
   isCurrentUser,
   allMembers,
+  onEdit,
 }: {
   user: GroupedMember;
   isCurrentUser: boolean;
   allMembers: MemberRow[];
+  onEdit: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -213,31 +229,29 @@ function MemberRow({
         </div>
 
         {/* Actions */}
-        <div className="flex flex-col gap-xs items-end">
-          {!isCurrentUser && user.scopes.map(({ scope, role }) => (
-            <div key={scope} className="flex items-center gap-xs">
-              {!isOwnerAnywhere && (
-                <select
-                  value={role}
-                  onChange={(e) => handleRoleChange(scope, e.target.value as "editor" | "viewer" | "recorder")}
-                  disabled={isPending}
-                  className="h-7 px-xs rounded text-label-md bg-surface-container border border-outline-variant/20 text-on-surface focus:outline-none"
-                >
-                  <option value="editor">Editor</option>
-                  <option value="viewer">Visor</option>
-                  <option value="recorder">Registrador</option>
-                </select>
-              )}
-              <button
-                type="button"
-                onClick={() => handleRemove(scope)}
-                disabled={isPending || isOwnerAnywhere}
-                className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors disabled:opacity-30"
-                title={isOwnerAnywhere ? "No se puede eliminar al propietario" : `Eliminar acceso ${SCOPE_LABEL[scope]}`}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>person_remove</span>
-              </button>
-            </div>
+        <div className="flex items-center gap-xs justify-end">
+          {!isCurrentUser && !isOwnerAnywhere && (
+            <button
+              type="button"
+              onClick={onEdit}
+              disabled={isPending}
+              className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors disabled:opacity-30"
+              title="Editar permisos"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>edit</span>
+            </button>
+          )}
+          {!isCurrentUser && user.scopes.map(({ scope }) => (
+            <button
+              key={scope}
+              type="button"
+              onClick={() => handleRemove(scope)}
+              disabled={isPending || isOwnerAnywhere}
+              className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors disabled:opacity-30"
+              title={isOwnerAnywhere ? "No se puede eliminar al propietario" : `Eliminar acceso ${SCOPE_LABEL[scope]}`}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>person_remove</span>
+            </button>
           ))}
         </div>
       </div>
@@ -279,14 +293,25 @@ function MemberRow({
           </div>
         </div>
         {!isCurrentUser && !isOwnerAnywhere && (
-          <button
-            type="button"
-            onClick={() => user.scopes.forEach(({ scope }) => handleRemove(scope))}
-            disabled={isPending}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors disabled:opacity-30 shrink-0"
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>person_remove</span>
-          </button>
+          <div className="flex gap-xs shrink-0">
+            <button
+              type="button"
+              onClick={onEdit}
+              disabled={isPending}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors disabled:opacity-30"
+              title="Editar permisos"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => user.scopes.forEach(({ scope }) => handleRemove(scope))}
+              disabled={isPending}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors disabled:opacity-30"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>person_remove</span>
+            </button>
+          </div>
         )}
       </div>
     </div>

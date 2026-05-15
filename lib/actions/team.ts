@@ -106,6 +106,30 @@ export async function updateMemberRole(userId: string, scope: Scope, role: "edit
   return { success: true };
 }
 
+export async function updateMemberPermissions(
+  userId: string,
+  role: "editor" | "viewer" | "recorder",
+  scopes: Scope[],
+) {
+  if (!scopes.length) return { error: "Selecciona al menos un ámbito" };
+  const admin = createAdminClient();
+  const allScopes: Scope[] = ["personal", "business"];
+
+  for (const scope of allScopes) {
+    if (scopes.includes(scope)) {
+      const { error } = await admin
+        .from("memberships")
+        .upsert({ user_id: userId, scope, role }, { onConflict: "user_id,scope" });
+      if (error) return { error: error.message };
+    } else {
+      await admin.from("memberships").delete().eq("user_id", userId).eq("scope", scope);
+    }
+  }
+
+  revalidatePath("/settings/team");
+  return { success: true };
+}
+
 export async function removeMember(userId: string, scope: Scope) {
   const supabase = await createClient();
   const { error } = await supabase
