@@ -46,12 +46,12 @@ export default async function ScopeLayout({
     }
   }
 
-  // Redirect employee users to the employee page (unless already there or on reimbursements)
+  // Redirect employee users always to the business scope (assignments live there)
   if (userRole === "employee") {
     const headersList = await headers();
     const pathname = headersList.get("x-pathname") ?? "";
-    if (!pathname.startsWith(`/${scope}/employee`) && !pathname.startsWith(`/${scope}/reimbursements`)) {
-      redirect(`/${scope}/employee`);
+    if (!pathname.startsWith("/business/employee") && !pathname.startsWith("/business/reimbursements")) {
+      redirect("/business/employee");
     }
   }
 

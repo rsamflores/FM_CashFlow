@@ -51,13 +51,18 @@ export function EditPermissionsDialog({
   useEffect(() => {
     if (open) {
       setRole(currentRole);
-      setScopes(currentScopes);
+      setScopes(currentRole === "employee" ? ["business"] : currentScopes);
       setAssignedCategoryIds(currentAssignedCategories);
       setError(null);
       setSuccess(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, currentRole, currentScopes.join(","), currentAssignedCategories.join(",")]);
+
+  // When role switches to employee, force business-only scope
+  useEffect(() => {
+    if (role === "employee") setScopes(["business"]);
+  }, [role]);
 
   function toggleScope(s: string) {
     setScopes((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]);
