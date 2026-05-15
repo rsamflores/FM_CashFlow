@@ -2,10 +2,13 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export function middleware(request: NextRequest) {
-  const response = NextResponse.next();
-  // Forward the current pathname so server layouts can read it via headers()
-  response.headers.set("x-pathname", request.nextUrl.pathname);
-  return response;
+  // Forward pathname as a REQUEST header so server components can read it via headers()
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", request.nextUrl.pathname);
+
+  return NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 }
 
 export const config = {
