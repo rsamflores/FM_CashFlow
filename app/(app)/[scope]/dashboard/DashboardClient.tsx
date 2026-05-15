@@ -199,97 +199,99 @@ export function DashboardClient({
         </div>
       </div>
 
-      {/* Monthly Projection Panel */}
-      <div className="bg-surface-container-low rounded-2xl border border-outline-variant/10 overflow-hidden">
-        <div className="px-lg py-md border-b border-outline-variant/10 flex items-center gap-sm">
-          <span className="material-symbols-outlined text-tertiary" style={{ fontSize: 20 }}>auto_graph</span>
-          <h3 className="text-body-sm font-bold text-on-surface">Proyección al cierre del mes</h3>
-          {totalBudgeted === 0 && (
-            <span className="text-label-md text-on-surface-variant ml-auto">Sin presupuestos definidos</span>
-          )}
-        </div>
-        <div className={`p-lg grid gap-lg ${accountProjections.length > 0 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"}`}>
-          {/* Global breakdown */}
-          <div className="flex flex-col gap-sm">
-            <ProjectionRow
-              label="Saldo actual en cuentas"
-              value={totalBalance}
-              icon="account_balance_wallet"
-              color="var(--color-on-surface-variant)"
-            />
-            {totalPendingIncome > 0 && (
-              <ProjectionRow
-                label={`+ Ingresos pendientes de confirmar`}
-                value={totalPendingIncome}
-                icon="schedule"
-                color="var(--color-tertiary)"
-                prefix="+"
-              />
-            )}
-            <div className="h-px bg-outline-variant/20 my-xs" />
-            <ProjectionRow
-              label="= Total proyectado disponible"
-              value={projectedTotal}
-              icon="savings"
-              color="var(--color-primary)"
-              bold
-            />
-            {totalBudgeted > 0 && (
-              <>
-                <ProjectionRow
-                  label={`- Presupuesto restante por ejecutar`}
-                  value={remainingBudget}
-                  icon="shopping_bag"
-                  color="var(--color-error)"
-                  prefix="-"
-                />
-                <div className="h-px bg-outline-variant/20 my-xs" />
-                <ProjectionRow
-                  label="= Remanente proyectado al cierre"
-                  value={projectedRemainder}
-                  icon={projectedRemainder >= 0 ? "check_circle" : "warning"}
-                  color={projectedRemainder >= 0 ? "var(--color-secondary-fixed)" : "var(--color-error)"}
-                  bold
-                />
-              </>
-            )}
+      {/* Monthly Projection Panel — per account */}
+      {accountProjections.length > 0 && (
+        <div className="bg-surface-container-low rounded-2xl border border-outline-variant/10 overflow-hidden">
+          <div className="px-lg py-md border-b border-outline-variant/10 flex items-center gap-sm">
+            <span className="material-symbols-outlined text-tertiary" style={{ fontSize: 20 }}>auto_graph</span>
+            <h3 className="text-body-sm font-bold text-on-surface">Proyección al cierre del mes</h3>
+            <span className="text-label-md text-on-surface-variant ml-auto">por cuenta</span>
           </div>
-
-          {/* Per-account projections */}
-          {accountProjections.length > 0 && (
-            <div className="flex flex-col gap-sm">
-              <p className="text-label-md text-on-surface-variant mb-xs">Saldo proyectado por cuenta</p>
-              {accountProjections.map((a) => (
+          <div className="p-lg grid grid-cols-1 md:grid-cols-2 gap-lg">
+            {accountProjections.map((a) => {
+              const projectedAvailable = a.currentBalance + a.pendingIncome;
+              const remainder = a.projected; // currentBalance + pendingIncome - budgetDebit
+              const remainderColor = remainder >= 0 ? "var(--color-secondary-fixed)" : "var(--color-error)";
+              return (
                 <div
                   key={a.id}
-                  className="rounded-xl p-md flex items-center justify-between border border-outline-variant/10"
-                  style={{ background: a.color + "10" }}
+                  className="rounded-2xl border border-outline-variant/10 overflow-hidden"
+                  style={{ background: a.color + "08" }}
                 >
-                  <div>
-                    <p className="text-label-md text-on-surface-variant">{a.name}</p>
-                    <p className="text-body-sm text-on-surface-variant mt-xs">
-                      {formatCurrency(a.currentBalance)}
-                      {a.pendingIncome > 0 && (
-                        <span style={{ color: "var(--color-tertiary)" }}>
-                          {" "}+{formatCurrency(a.pendingIncome)}
-                        </span>
-                      )}
-                    </p>
+                  {/* Account header */}
+                  <div
+                    className="flex items-center gap-sm px-md py-sm border-b border-outline-variant/10"
+                    style={{ background: a.color + "18" }}
+                  >
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ background: a.color }} />
+                    <p className="text-body-sm font-bold text-on-surface flex-1 truncate">{a.name}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-label-md text-on-surface-variant">
-                      {a.budgetDebit > 0 ? `−${formatCurrency(a.budgetDebit)} presup.` : "Proyectado"}
-                    </p>
-                    <p className="text-body-sm font-bold" style={{ color: a.projected >= 0 ? a.color : "var(--color-error)" }}>
-                      {formatCurrency(a.projected)}
-                    </p>
+
+                  {/* Projection rows */}
+                  <div className="px-md py-sm flex flex-col gap-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
+                        <span className="material-symbols-outlined" style={{ fontSize: 13 }}>account_balance_wallet</span>
+                        Saldo actual
+                      </span>
+                      <span className="text-body-sm text-on-surface">{formatCurrency(a.currentBalance)}</span>
+                    </div>
+
+                    {a.pendingIncome > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
+                          <span className="material-symbols-outlined" style={{ fontSize: 13 }}>schedule</span>
+                          + Ingresos pendientes
+                        </span>
+                        <span className="text-body-sm font-bold" style={{ color: "var(--color-tertiary)" }}>
+                          +{formatCurrency(a.pendingIncome)}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="h-px my-xs" style={{ background: a.color + "30" }} />
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
+                        <span className="material-symbols-outlined" style={{ fontSize: 13 }}>savings</span>
+                        = Proyectado disponible
+                      </span>
+                      <span className="text-body-sm font-bold text-on-surface">{formatCurrency(projectedAvailable)}</span>
+                    </div>
+
+                    {a.budgetDebit > 0 && (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-label-md text-on-surface-variant flex items-center gap-xs">
+                            <span className="material-symbols-outlined" style={{ fontSize: 13 }}>shopping_bag</span>
+                            − Presupuesto por ejecutar
+                          </span>
+                          <span className="text-body-sm font-bold" style={{ color: "var(--color-error)" }}>
+                            −{formatCurrency(a.budgetDebit)}
+                          </span>
+                        </div>
+                        <div className="h-px my-xs" style={{ background: a.color + "30" }} />
+                      </>
+                    )}
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-label-md font-bold flex items-center gap-xs" style={{ color: remainderColor }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 13 }}>
+                          {remainder >= 0 ? "check_circle" : "warning"}
+                        </span>
+                        = Remanente al cierre
+                      </span>
+                      <span className="text-body-sm font-bold" style={{ color: remainderColor }}>
+                        {formatCurrency(remainder)}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className={`grid gap-lg ${budgets.length > 0 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"}`}>
         {/* Recent transactions */}
