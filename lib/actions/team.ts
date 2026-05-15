@@ -70,11 +70,13 @@ export async function inviteMember(formData: FormData) {
 
   // Invite or look up user
   let targetUserId: string;
+  let userAlreadyExists = false;
   const { data: existingUsers } = await admin.auth.admin.listUsers({ perPage: 1000 });
   const existing = existingUsers.users.find((u) => u.email === email);
 
   if (existing) {
     targetUserId = existing.id;
+    userAlreadyExists = true;
   } else {
     const { data: invited, error: invErr } = await admin.auth.admin.inviteUserByEmail(email);
     if (invErr) return { error: invErr.message };
@@ -82,9 +84,18 @@ export async function inviteMember(formData: FormData) {
   }
 
   // Upsert memberships for each scope
+  // If user already has an account, mark as accepted immediately (no email flow needed)
+  const now = new Date().toISOString();
   for (const scope of scopes) {
     const { error } = await admin.from("memberships").upsert(
-      { user_id: targetUserId, scope, role, invited_email: email, invited_at: new Date().toISOString() },
+      {
+        user_id: targetUserId,
+        scope,
+        role,
+        invited_email: email,
+        invited_at: now,
+        ...(userAlreadyExists ? { accepted_at: now } : {}),
+      },
       { onConflict: "user_id,scope" },
     );
     if (error) return { error: error.message };
@@ -123,11 +134,15 @@ export async function updateMemberPermissions(
   const admin = createAdminClient();
   const allScopes: Scope[] = ["personal", "business"];
 
+  const now = new Date().toISOString();
   for (const scope of allScopes) {
     if (scopes.includes(scope)) {
       const { error } = await admin
         .from("memberships")
-        .upsert({ user_id: userId, scope, role }, { onConflict: "user_id,scope" });
+        .upsert(
+          { user_id: userId, scope, role, accepted_at: now },
+          { onConflict: "user_id,scope" },
+        );
       if (error) return { error: error.message };
     } else {
       await admin.from("memberships").delete().eq("user_id", userId).eq("scope", scope);

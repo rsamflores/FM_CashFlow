@@ -17,8 +17,17 @@ export async function login(
 
   if (error) return { error: error.message };
 
+  // Auto-accept any pending memberships for this user (invited while already having an account)
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const admin = createAdminClient();
+  await admin
+    .from("memberships")
+    .update({ accepted_at: new Date().toISOString() })
+    .eq("user_id", data.user.id)
+    .is("accepted_at", null);
+
   // If all memberships are recorder role, send to the recorder UI
-  const { data: memberships } = await supabase
+  const { data: memberships } = await admin
     .from("memberships")
     .select("scope, role")
     .eq("user_id", data.user.id);
