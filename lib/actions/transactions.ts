@@ -161,7 +161,7 @@ export async function createTransaction(scope: Scope, formData: FormData) {
   const isRecurring = formData.get("is_recurring") === "true";
   const forceConfirmed = formData.get("force_confirmed") === "true";
   const kind = parsed.data.kind;
-  const today = new Date().toLocaleDateString("en-CA");
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/El_Salvador" });
   const isFutureTx = parsed.data.occurred_on !== today;
 
   // Expenses always start as pending — the user must confirm when they actually pay.
@@ -715,7 +715,7 @@ export async function createTransfer(formData: FormData) {
   const fromAcc = accounts.find((a) => a.id === fromAccountId)!;
   const toAcc = accounts.find((a) => a.id === toAccountId)!;
   const transferId = crypto.randomUUID();
-  const today = new Date().toLocaleDateString("en-CA");
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/El_Salvador" });
   const isConfirmed = occurredOn === today;
 
   // Recurring transfer rule
