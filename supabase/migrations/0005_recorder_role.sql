@@ -20,14 +20,14 @@ RETURNS boolean LANGUAGE sql SECURITY DEFINER AS $$
 $$;
 
 -- 3. Allow recorder to INSERT transactions (existing editor policy stays for editor/owner)
+DROP POLICY IF EXISTS "Transactions: recorders insert" ON transactions;
 CREATE POLICY "Transactions: recorders insert" ON transactions
   FOR INSERT WITH CHECK (
     EXISTS (
       SELECT 1 FROM memberships m
-      WHERE m.user_id     = auth.uid()
-        AND m.scope       = transactions.scope
-        AND m.role        = 'recorder'
-        AND m.accepted_at IS NOT NULL
+      WHERE m.user_id = auth.uid()
+        AND m.scope   = transactions.scope
+        AND m.role    = 'recorder'
     )
   );
 
