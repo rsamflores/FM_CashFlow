@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Scope } from "@/lib/scope";
 import type { TransactionRow } from "@/lib/actions/transactions";
+import { insertNotifications, getScopeManagers } from "@/lib/actions/notifications";
 
 export type ReimbursementItemRow = {
   id: string;
@@ -161,6 +162,22 @@ export async function createReimbursementRequest(
 
   if (itemsErr) return { error: itemsErr.message };
 
+  // Notify scope owners/editors of new reimbursement request
+  const managers = await getScopeManagers(scope);
+  const profile = await (async () => {
+    const { data } = await createAdminClient().from("profiles").select("full_name").eq("id", user.id).maybeSingle();
+    if (data?.full_name) return data.full_name;
+    const { data: ud } = await createAdminClient().auth.admin.getUserById(user.id);
+    return ud.user?.email?.split("@")[0] ?? "Un empleado";
+  })();
+  await insertNotifications(managers.filter((id) => id !== user.id), {
+    scope,
+    type: "reimbursement_submitted",
+    title: "Nueva solicitud de reembolso",
+    body: `${profile} solicitó $${total_amount.toFixed(2)}`,
+    link: `/${scope}/reimbursements`,
+  });
+
   revalidatePath(`/${scope}/employee`);
   revalidatePath(`/${scope}/reimbursements`);
   return { success: true, id: req.id };
@@ -267,6 +284,15 @@ export async function payReimbursement(
 
   if (updErr) return { error: updErr.message };
 
+  // Notify the employee that their reimbursement was paid
+  await insertNotifications([req.employee_id], {
+    scope,
+    type: "reimbursement_paid",
+    title: "Reembolso pagado",
+    body: `Tu solicitud de $${Number(req.total_amount).toFixed(2)} fue procesada`,
+    link: `/${scope}/reimbursements`,
+  });
+
   revalidatePath(`/${scope}/reimbursements`);
   revalidatePath(`/${scope}/employee`);
   revalidatePath(`/${scope}/transactions`);
@@ -282,6 +308,14 @@ export async function rejectReimbursement(
 ): Promise<{ success: true } | { error: string }> {
   const admin = createAdminClient();
 
+  const { data: req, error: fetchErr } = await admin
+    .from("reimbursement_requests")
+    .select("employee_id, total_amount")
+    .eq("id", id)
+    .single();
+
+  if (fetchErr || !req) return { error: fetchErr?.message ?? "No encontrado" };
+
   const { error } = await admin
     .from("reimbursement_requests")
     .update({
@@ -292,6 +326,15 @@ export async function rejectReimbursement(
     .eq("id", id);
 
   if (error) return { error: error.message };
+
+  // Notify the employee that their reimbursement was rejected
+  await insertNotifications([req.employee_id], {
+    scope,
+    type: "reimbursement_rejected",
+    title: "Solicitud de reembolso rechazada",
+    body: reason || `Tu solicitud de $${Number(req.total_amount).toFixed(2)} fue revisada`,
+    link: `/${scope}/reimbursements`,
+  });
 
   revalidatePath(`/${scope}/reimbursements`);
   revalidatePath(`/${scope}/employee`);

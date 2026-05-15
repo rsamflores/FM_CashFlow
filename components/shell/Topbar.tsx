@@ -2,6 +2,7 @@
 
 import { logout } from "@/app/(auth)/actions";
 import { useSidebar } from "@/lib/sidebar-context";
+import { NotificationBell } from "./NotificationBell";
 
 const ROLE_LABEL: Record<string, string> = {
   owner: "Propietario", editor: "Editor", viewer: "Visor",
@@ -54,8 +55,7 @@ export function Topbar({
           </div>
         )}
         <div className="hidden sm:flex items-center gap-xs">
-          <IconButton icon="search" />
-          <IconButton icon="notifications" badge />
+          <NotificationBell />
         </div>
         <form action={logout}>
           <button
@@ -71,16 +71,3 @@ export function Topbar({
   );
 }
 
-function IconButton({ icon, badge }: { icon: string; badge?: boolean }) {
-  return (
-    <button
-      type="button"
-      className="p-sm text-on-surface-variant hover:bg-surface-container-highest rounded-full transition-all relative"
-    >
-      <span className="material-symbols-outlined">{icon}</span>
-      {badge && (
-        <span className="absolute top-2 right-2 w-2 h-2 bg-secondary-fixed rounded-full" />
-      )}
-    </button>
-  );
-}

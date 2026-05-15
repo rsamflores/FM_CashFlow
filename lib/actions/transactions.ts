@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 import type { Scope } from "@/lib/scope";
+import { insertNotifications, getScopeManagers } from "@/lib/actions/notifications";
 
 const TransactionSchema = z.object({
   kind: z.enum(["income", "expense"]),
@@ -319,6 +320,7 @@ export async function createTransaction(scope: Scope, formData: FormData) {
 
 export async function confirmTransaction(id: string, scope: Scope) {
   const supabase = await createClient();
+  const { data: { user: confirmer } } = await supabase.auth.getUser();
 
   const { data: tx, error: txErr } = await supabase
     .from("transactions")
@@ -521,6 +523,35 @@ export async function confirmTransaction(id: string, scope: Scope) {
             .eq("id", ivaRule.id);
         }
       }
+    }
+  }
+
+  // Notify the transaction creator if someone else confirmed it
+  const createdBy = (tx as unknown as { created_by?: string }).created_by;
+  if (createdBy && confirmer && createdBy !== confirmer.id) {
+    const kindLabel = tx.kind === "income" ? "ingreso" : "egreso";
+    const amountStr = `$${Number(tx.amount).toFixed(2)}`;
+    await insertNotifications([createdBy], {
+      scope,
+      type: "transaction_confirmed",
+      title: "Transacción confirmada",
+      body: `${tx.description ? `"${tx.description}" — ` : ""}${amountStr} (${kindLabel})`,
+      link: `/${scope}/transactions`,
+    });
+  } else if (confirmer) {
+    // Notify all other scope managers about the confirmation
+    const managers = await getScopeManagers(scope);
+    const others = managers.filter((uid) => uid !== confirmer.id);
+    if (others.length > 0) {
+      const kindLabel = tx.kind === "income" ? "ingreso" : "egreso";
+      const amountStr = `$${Number(tx.amount).toFixed(2)}`;
+      await insertNotifications(others, {
+        scope,
+        type: "transaction_confirmed",
+        title: "Transacción confirmada",
+        body: `${tx.description ? `"${tx.description}" — ` : ""}${amountStr} (${kindLabel})`,
+        link: `/${scope}/transactions`,
+      });
     }
   }
 
