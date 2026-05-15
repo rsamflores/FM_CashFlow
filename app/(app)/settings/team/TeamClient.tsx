@@ -109,11 +109,11 @@ export function TeamClient({ members, currentUserId }: Props) {
       <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low overflow-hidden">
         {/* Table header */}
         <div className="hidden md:grid px-lg py-sm border-b border-outline-variant/10 bg-surface-container"
-          style={{ gridTemplateColumns: "1fr 200px 120px 80px" }}>
+          style={{ gridTemplateColumns: "1fr 200px 120px 140px" }}>
           <span className="text-label-md text-on-surface-variant">Miembro</span>
           <span className="text-label-md text-on-surface-variant">Acceso</span>
           <span className="text-label-md text-on-surface-variant">Estado</span>
-          <span />
+          <span className="text-label-md text-on-surface-variant text-right">Acciones</span>
         </div>
 
         {users.map((user) => (
@@ -180,7 +180,7 @@ function MemberRow({
     <div className="border-t border-outline-variant/10" style={{ opacity: isPending ? 0.6 : 1 }}>
       {/* Desktop */}
       <div className="hidden md:grid px-lg py-md items-start gap-md"
-        style={{ gridTemplateColumns: "1fr 200px 120px 80px" }}>
+        style={{ gridTemplateColumns: "1fr 200px 120px 140px" }}>
 
         {/* Member info */}
         <div className="flex items-center gap-sm min-w-0">
@@ -231,28 +231,31 @@ function MemberRow({
         {/* Actions */}
         <div className="flex items-center gap-xs justify-end">
           {!isCurrentUser && !isOwnerAnywhere && (
-            <button
-              type="button"
-              onClick={onEdit}
-              disabled={isPending}
-              className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors disabled:opacity-30"
-              title="Editar permisos"
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>edit</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={onEdit}
+                disabled={isPending}
+                className="flex items-center gap-xs h-7 px-sm rounded-full text-label-md font-bold transition-colors disabled:opacity-30"
+                style={{ background: "var(--color-primary)15", color: "var(--color-primary)" }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 13 }}>edit</span>
+                Editar rol
+              </button>
+              {user.scopes.map(({ scope }) => (
+                <button
+                  key={scope}
+                  type="button"
+                  onClick={() => handleRemove(scope)}
+                  disabled={isPending}
+                  className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors disabled:opacity-30"
+                  title={`Eliminar acceso ${SCOPE_LABEL[scope]}`}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>person_remove</span>
+                </button>
+              ))}
+            </>
           )}
-          {!isCurrentUser && user.scopes.map(({ scope }) => (
-            <button
-              key={scope}
-              type="button"
-              onClick={() => handleRemove(scope)}
-              disabled={isPending || isOwnerAnywhere}
-              className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors disabled:opacity-30"
-              title={isOwnerAnywhere ? "No se puede eliminar al propietario" : `Eliminar acceso ${SCOPE_LABEL[scope]}`}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>person_remove</span>
-            </button>
-          ))}
         </div>
       </div>
 
