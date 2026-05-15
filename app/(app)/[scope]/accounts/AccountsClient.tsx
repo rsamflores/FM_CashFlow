@@ -36,6 +36,21 @@ export function AccountsClient({ scope, accounts, netByAccount, usedByAccount, t
   const [editAccount, setEditAccount] = useState<AccountRow | undefined>();
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
 
+  // Current month income/expense per account (confirmed, non-transfer)
+  const now = new Date();
+  const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const monthIncomeByAccount: Record<string, number> = {};
+  const monthExpenseByAccount: Record<string, number> = {};
+  for (const tx of transactions) {
+    if (!tx.is_confirmed || tx.transfer_id) continue;
+    if (!tx.occurred_on.startsWith(currentYearMonth)) continue;
+    if (tx.kind === "income") {
+      monthIncomeByAccount[tx.account_id] = (monthIncomeByAccount[tx.account_id] ?? 0) + Number(tx.amount);
+    } else {
+      monthExpenseByAccount[tx.account_id] = (monthExpenseByAccount[tx.account_id] ?? 0) + Number(tx.amount);
+    }
+  }
+
   function openCreate() {
     setEditAccount(undefined);
     setDialogOpen(true);
@@ -102,6 +117,8 @@ export function AccountsClient({ scope, accounts, netByAccount, usedByAccount, t
               account={account}
               netAmount={netByAccount[account.id] ?? 0}
               usedAmount={usedByAccount[account.id] ?? 0}
+              monthIncome={monthIncomeByAccount[account.id] ?? 0}
+              monthExpense={monthExpenseByAccount[account.id] ?? 0}
               isSelected={selectedAccountId === account.id}
               onSelect={() =>
                 setSelectedAccountId((prev) => (prev === account.id ? null : account.id))
@@ -139,6 +156,8 @@ function AccountCard({
   account,
   netAmount,
   usedAmount,
+  monthIncome,
+  monthExpense,
   isSelected,
   onSelect,
   onEdit,
@@ -148,6 +167,8 @@ function AccountCard({
   account: AccountRow;
   netAmount: number;
   usedAmount: number;
+  monthIncome: number;
+  monthExpense: number;
   isSelected: boolean;
   onSelect: () => void;
   onEdit: () => void;
@@ -258,19 +279,27 @@ function AccountCard({
           </>
         ) : (
           <>
-            <p className="text-label-md text-on-surface-variant">Saldo actual</p>
-            <p className="text-title-md font-bold" style={{ color: accentColor }}>
-              {formatCurrency(currentBalance)}
+            <p className="text-label-md text-on-surface-variant mb-sm">Este mes</p>
+            <div className="flex gap-md">
+              <div className="flex-1">
+                <p className="text-label-md text-on-surface-variant">Ingresos</p>
+                <p className="text-body-sm font-bold" style={{ color: "var(--color-secondary-fixed)" }}>
+                  {monthIncome > 0 ? `+${formatCurrency(monthIncome)}` : "—"}
+                </p>
+              </div>
+              <div className="flex-1 text-right">
+                <p className="text-label-md text-on-surface-variant">Egresos</p>
+                <p className="text-body-sm font-bold" style={{ color: "var(--color-error)" }}>
+                  {monthExpense > 0 ? `-${formatCurrency(monthExpense)}` : "—"}
+                </p>
+              </div>
+            </div>
+            <p className="text-label-md text-on-surface-variant mt-sm">
+              Saldo{" "}
+              <span className="font-bold" style={{ color: accentColor }}>
+                {formatCurrency(currentBalance)}
+              </span>
             </p>
-            {netAmount !== 0 && (
-              <p className="text-label-md text-on-surface-variant mt-xs">
-                Inicial {formatCurrency(account.opening_balance)}
-                {" · "}
-                <span style={{ color: netAmount >= 0 ? "var(--color-secondary-fixed)" : "var(--color-error)" }}>
-                  {netAmount >= 0 ? "+" : ""}{formatCurrency(netAmount)}
-                </span>
-              </p>
-            )}
           </>
         )}
       </div>
