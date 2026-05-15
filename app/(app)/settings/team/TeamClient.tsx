@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { updateMemberRole, removeMember, type MemberRow } from "@/lib/actions/team";
+import { updateMemberRole, removeMember, deleteUser, type MemberRow } from "@/lib/actions/team";
 import { InviteDialog } from "@/components/forms/InviteDialog";
 import { EditPermissionsDialog } from "@/components/forms/EditPermissionsDialog";
 import { ResetPasswordDialog } from "@/components/forms/ResetPasswordDialog";
@@ -52,6 +52,7 @@ export function TeamClient({ members, currentUserId, businessCategories = [] }: 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editUser, setEditUser] = useState<GroupedMember | null>(null);
   const [resetUser, setResetUser] = useState<GroupedMember | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<GroupedMember | null>(null);
 
   // Group by user
   const grouped = new Map<string, GroupedMember>();
@@ -137,6 +138,7 @@ export function TeamClient({ members, currentUserId, businessCategories = [] }: 
             allMembers={members}
             onEdit={() => setEditUser(user)}
             onResetPassword={() => setResetUser(user)}
+            onDelete={() => setDeleteTarget(user)}
           />
         ))}
       </div>
@@ -168,6 +170,13 @@ export function TeamClient({ members, currentUserId, businessCategories = [] }: 
           displayName={resetUser.full_name ?? resetUser.email ?? "—"}
         />
       )}
+
+      {deleteTarget && (
+        <DeleteUserDialog
+          user={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+        />
+      )}
     </>
   );
 }
@@ -178,12 +187,14 @@ function MemberRowItem({
   allMembers,
   onEdit,
   onResetPassword,
+  onDelete,
 }: {
   user: GroupedMember;
   isCurrentUser: boolean;
   allMembers: MemberRow[];
   onEdit: () => void;
   onResetPassword: () => void;
+  onDelete: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -282,18 +293,17 @@ function MemberRowItem({
               >
                 <span className="material-symbols-outlined" style={{ fontSize: 14 }}>lock_reset</span>
               </button>
-              {!isOwnerAnywhere && user.scopes.map(({ scope }) => (
+              {!isOwnerAnywhere && (
                 <button
-                  key={scope}
                   type="button"
-                  onClick={() => handleRemove(scope)}
+                  onClick={onDelete}
                   disabled={isPending}
                   className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors disabled:opacity-30"
-                  title={`Eliminar acceso ${SCOPE_LABEL[scope]}`}
+                  title="Eliminar usuario"
                 >
-                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>person_remove</span>
+                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>delete</span>
                 </button>
-              ))}
+              )}
             </>
           )}
         </div>
@@ -358,15 +368,100 @@ function MemberRowItem({
             {!isOwnerAnywhere && (
               <button
                 type="button"
-                onClick={() => user.scopes.forEach(({ scope }) => handleRemove(scope))}
+                onClick={onDelete}
                 disabled={isPending}
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors disabled:opacity-30"
+                title="Eliminar usuario"
               >
-                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>person_remove</span>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
               </button>
             )}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function DeleteUserDialog({ user, onClose }: { user: GroupedMember; onClose: () => void }) {
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const displayName = user.full_name ?? user.email ?? "este usuario";
+
+  function handleConfirm() {
+    startTransition(async () => {
+      const result = await deleteUser(user.user_id);
+      if ("error" in result) { setError(result.error); return; }
+      onClose();
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-md">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="relative z-10 w-full rounded-2xl border border-outline-variant/10 bg-surface-container shadow-2xl"
+        style={{ maxWidth: 400 }}
+      >
+        <div className="p-lg flex flex-col gap-md">
+          {/* Icon + title */}
+          <div className="flex items-center gap-sm">
+            <div
+              className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+              style={{ background: "var(--color-error)20" }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: "var(--color-error)" }}>
+                delete_forever
+              </span>
+            </div>
+            <div>
+              <p className="text-body-sm font-bold text-on-surface">Eliminar usuario</p>
+              <p className="text-label-md text-on-surface-variant">Esta acción no se puede deshacer</p>
+            </div>
+          </div>
+
+          {/* Warning */}
+          <div
+            className="rounded-xl p-md text-label-md"
+            style={{ background: "var(--color-error)10", color: "var(--color-on-surface-variant)" }}
+          >
+            Se eliminará a <strong className="text-on-surface">{displayName}</strong> permanentemente:
+            <ul className="mt-xs space-y-[2px] list-disc list-inside">
+              <li>Acceso a todos los ámbitos</li>
+              <li>Asignaciones de categorías</li>
+              <li>Cuenta de autenticación</li>
+            </ul>
+            <p className="mt-sm" style={{ color: "var(--color-error)" }}>
+              Sus transacciones y solicitudes de reembolso quedarán registradas en el sistema.
+            </p>
+          </div>
+
+          {error && (
+            <p className="text-label-md px-sm py-xs rounded-lg" style={{ background: "var(--color-error)15", color: "var(--color-error)" }}>
+              {error}
+            </p>
+          )}
+
+          <div className="flex gap-sm justify-end pt-sm border-t border-outline-variant/10">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isPending}
+              className="h-9 px-lg rounded-full text-body-sm text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={isPending}
+              className="h-9 px-lg rounded-full text-body-sm font-bold transition-opacity disabled:opacity-50"
+              style={{ background: "var(--color-error)", color: "var(--color-on-error)" }}
+            >
+              {isPending ? "Eliminando…" : "Eliminar usuario"}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

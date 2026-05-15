@@ -88,10 +88,7 @@ export async function getMyExpensesForReimbursement(scope: Scope): Promise<Trans
     .eq("kind", "expense")
     .eq("is_confirmed", true)
     .eq("affects_balance", false)
-    // We need transactions created by this employee — filter by a custom metadata field isn't available,
-    // so we filter by the "employee_id" concept. Since employees can only insert their own txs per RLS,
-    // we look for txs that belong to this user by checking reimbursement items or by lack thereof.
-    // Actually, we need to track employee_id on transactions. For now, return all scope txs not linked.
+    .eq("created_by", user.id)
     .order("occurred_on", { ascending: false });
 
   if (linkedIds.length > 0) {

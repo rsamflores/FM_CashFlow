@@ -176,3 +176,34 @@ export async function removeMember(userId: string, scope: Scope) {
   revalidatePath("/settings/team");
   return { success: true };
 }
+
+export async function deleteUser(userId: string): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado" };
+  if (user.id === userId) return { error: "No puedes eliminarte a ti mismo" };
+
+  const admin = createAdminClient();
+
+  // Prevent deleting owners
+  const { data: targetScopes } = await admin
+    .from("memberships")
+    .select("role")
+    .eq("user_id", userId);
+  if (targetScopes?.some((m: { role: string }) => m.role === "owner")) {
+    return { error: "No es posible eliminar a un propietario" };
+  }
+
+  // Remove related data first to avoid FK constraint issues
+  await admin.from("employee_assignments").delete().eq("user_id", userId);
+  await admin.from("notifications").delete().eq("user_id", userId);
+  await admin.from("memberships").delete().eq("user_id", userId);
+  await admin.from("profiles").delete().eq("id", userId);
+
+  // Delete from auth (permanent, cannot be undone)
+  const { error } = await admin.auth.admin.deleteUser(userId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings/team");
+  return { success: true };
+}
