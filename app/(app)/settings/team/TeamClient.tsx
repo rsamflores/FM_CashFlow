@@ -230,7 +230,7 @@ function MemberRow({
 
         {/* Actions */}
         <div className="flex items-center gap-xs justify-end">
-          {!isCurrentUser && !isOwnerAnywhere && (
+          {!isCurrentUser && (
             <>
               <button
                 type="button"
@@ -242,7 +242,7 @@ function MemberRow({
                 <span className="material-symbols-outlined" style={{ fontSize: 13 }}>edit</span>
                 Editar rol
               </button>
-              {user.scopes.map(({ scope }) => (
+              {!isOwnerAnywhere && user.scopes.map(({ scope }) => (
                 <button
                   key={scope}
                   type="button"
@@ -295,7 +295,7 @@ function MemberRow({
             ))}
           </div>
         </div>
-        {!isCurrentUser && !isOwnerAnywhere && (
+        {!isCurrentUser && (
           <div className="flex gap-xs shrink-0">
             <button
               type="button"
@@ -306,14 +306,16 @@ function MemberRow({
             >
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>
             </button>
-            <button
-              type="button"
-              onClick={() => user.scopes.forEach(({ scope }) => handleRemove(scope))}
-              disabled={isPending}
-              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors disabled:opacity-30"
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>person_remove</span>
-            </button>
+            {!isOwnerAnywhere && (
+              <button
+                type="button"
+                onClick={() => user.scopes.forEach(({ scope }) => handleRemove(scope))}
+                disabled={isPending}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors disabled:opacity-30"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>person_remove</span>
+              </button>
+            )}
           </div>
         )}
       </div>
