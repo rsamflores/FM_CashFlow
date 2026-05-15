@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { Topbar } from "@/components/shell/Topbar";
 import { isValidScope, SCOPE_LABEL } from "@/lib/scope";
-import { formatMonth } from "@/lib/format";
+import { formatMonth, svToday } from "@/lib/format";
 import { getAccounts } from "@/lib/actions/accounts";
 import { getTransactionsFrom } from "@/lib/actions/transactions";
 import { getBudgets } from "@/lib/actions/budgets";
@@ -15,9 +15,7 @@ export default async function DashboardPage({
   const { scope } = await params;
   if (!isValidScope(scope)) notFound();
 
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth(); // 0-indexed
+  const { year, month } = svToday(); // month is 0-indexed, El Salvador timezone
 
   const currentMonthStr = `${year}-${String(month + 1).padStart(2, "0")}-01`;
 
@@ -90,7 +88,6 @@ export default async function DashboardPage({
     const amt = Number(tx.amount);
     pendingIncomeByAccount[tx.account_id] = (pendingIncomeByAccount[tx.account_id] ?? 0) + amt;
   }
-  const totalPendingIncome = Object.values(pendingIncomeByAccount).reduce((s, v) => s + v, 0);
 
   // Pending transfer expenses: leaves the source account when confirmed (e.g. IVA → tax account)
   const pendingTransferOutByAccount: Record<string, number> = {};
@@ -104,6 +101,23 @@ export default async function DashboardPage({
     const amt = Number(tx.amount);
     pendingTransferOutByAccount[tx.account_id] = (pendingTransferOutByAccount[tx.account_id] ?? 0) + amt;
   }
+
+  // Incomes are stored as NET; IVA transfer-out amounts represent the portion the client
+  // actually pays into the account before the IVA is moved to the tax account.
+  // Add each pending IVA transfer-out amount back to the source account's income so the
+  // projection shows the gross receipt (net + IVA in, then IVA out = net remaining).
+  for (const tx of pending.filter((t) =>
+    t.kind === "expense" &&
+    !!t.transfer_id &&
+    t.description?.startsWith("IVA —") &&
+    t.occurred_on >= currentMonthStr &&
+    t.occurred_on < nextMonthStr
+  )) {
+    const amt = Number(tx.amount);
+    pendingIncomeByAccount[tx.account_id] = (pendingIncomeByAccount[tx.account_id] ?? 0) + amt;
+  }
+
+  const totalPendingIncome = Object.values(pendingIncomeByAccount).reduce((s, v) => s + v, 0);
 
   // Pending transfer income: arrives at the destination account when confirmed (e.g. tax account receives IVA)
   const pendingTransferInByAccount: Record<string, number> = {};
