@@ -538,7 +538,7 @@ function PendingRow({
         {isOverdue && (
           <span
             className="shrink-0 text-label-md font-bold px-xs py-[2px] rounded-full"
-            style={{ background: "var(--color-error)", color: "#ffffff" }}
+            style={{ background: "var(--color-error-container)", color: "#ffffff" }}
           >
             ATRASADA
           </span>
