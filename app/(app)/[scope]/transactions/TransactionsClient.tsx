@@ -285,7 +285,7 @@ export function TransactionsClient({ scope, transactions, accounts, categories, 
             <p className="text-label-md text-on-surface-variant">Confirma para mover el dinero entre cuentas</p>
           </div>
           {pending.filter(t => t.transfer_id && t.kind === "expense").map((tx) => (
-            <PendingRow key={tx.id} tx={tx} onConfirm={() => handleConfirm(tx)} onDelete={() => handleDelete(tx)} onEdit={() => openEditTransfer(tx)} />
+            <PendingRow key={tx.id} tx={tx} today={today} onConfirm={() => handleConfirm(tx)} onDelete={() => handleDelete(tx)} onEdit={() => openEditTransfer(tx)} />
           ))}
         </div>
       )}
