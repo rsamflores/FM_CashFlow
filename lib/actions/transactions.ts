@@ -456,6 +456,7 @@ export async function confirmTransaction(id: string, scope: Scope) {
       .is("category_id", null)
       .not("transfer_id", "is", null)
       .eq("is_confirmed", false)
+      .limit(1)
       .maybeSingle();
 
     if (ivaExpense?.transfer_id) {
@@ -819,6 +820,20 @@ export async function generateRetroactiveIvaTransfers() {
 
   if (incErr || !incomes) return { error: incErr?.message ?? "Error al obtener ingresos" };
 
+  // Fetch all existing IVA transfers to avoid duplicates
+  // An IVA transfer expense is identified by: kind=expense, category_id=null, transfer_id IS NOT NULL
+  const { data: existingIvaExpenses } = await supabase
+    .from("transactions")
+    .select("account_id, occurred_on")
+    .eq("kind", "expense")
+    .is("category_id", null)
+    .not("transfer_id", "is", null);
+
+  // Build a set of "account_id|occurred_on" keys for fast lookup
+  const existingIvaKeys = new Set(
+    (existingIvaExpenses ?? []).map((t: { account_id: string; occurred_on: string }) => `${t.account_id}|${t.occurred_on}`)
+  );
+
   // Build set of account_ids needed for scope lookup
   const accountIds = [...new Set(incomes.map((i: { account_id: string }) => i.account_id))];
   const { data: accountsData } = await supabase
@@ -832,6 +847,9 @@ export async function generateRetroactiveIvaTransfers() {
   let created = 0;
 
   for (const income of incomes) {
+    // Skip if an IVA transfer already exists for this income (prevent duplicates)
+    if (existingIvaKeys.has(`${income.account_id}|${income.occurred_on}`)) continue;
+
     const net = Number(income.amount);
     const ivaAmount = Math.round(net * 1.11112 * 0.13 * 100) / 100;
     const transferId = crypto.randomUUID();

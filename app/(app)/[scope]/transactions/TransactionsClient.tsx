@@ -82,6 +82,7 @@ export function TransactionsClient({ scope, transactions, accounts, categories, 
 
   const isCurrentMonth = selectedMonth === currentMonth;
   const monthLabel = formatMonth(`${selectedMonth}-01`);
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/El_Salvador" });
 
   const pending = transactions
     .filter((t) => !t.is_confirmed)
@@ -249,7 +250,7 @@ export function TransactionsClient({ scope, transactions, accounts, categories, 
             <p className="text-label-md text-on-surface-variant">Marca como recibido para sumar al saldo</p>
           </div>
           {pending.filter(t => t.kind === "income" && !t.transfer_id).map((tx) => (
-            <PendingRow key={tx.id} tx={tx} onConfirm={() => handleConfirm(tx)} onDelete={() => handleDelete(tx)} onEdit={() => openEdit(tx)} />
+            <PendingRow key={tx.id} tx={tx} today={today} onConfirm={() => handleConfirm(tx)} onDelete={() => handleDelete(tx)} onEdit={() => openEdit(tx)} />
           ))}
         </div>
       )}
@@ -266,7 +267,7 @@ export function TransactionsClient({ scope, transactions, accounts, categories, 
             <p className="text-label-md text-on-surface-variant">Confirma el pago para debitar la cuenta</p>
           </div>
           {pending.filter(t => t.kind === "expense" && !t.transfer_id).map((tx) => (
-            <PendingRow key={tx.id} tx={tx} onConfirm={() => handleConfirm(tx)} onDelete={() => handleDelete(tx)} onEdit={() => openEdit(tx)} />
+            <PendingRow key={tx.id} tx={tx} today={today} onConfirm={() => handleConfirm(tx)} onDelete={() => handleDelete(tx)} onEdit={() => openEdit(tx)} />
           ))}
         </div>
       )}
@@ -490,15 +491,18 @@ function TransactionRow({
 
 function PendingRow({
   tx,
+  today,
   onConfirm,
   onDelete,
   onEdit,
 }: {
   tx: TransactionRow;
+  today: string;
   onConfirm: () => void;
   onDelete: () => void;
   onEdit: () => void;
 }) {
+  const isOverdue = tx.occurred_on < today;
   const isExpense = tx.kind === "expense";
   const isTransfer = !!tx.transfer_id;
   const catColor = isTransfer
@@ -527,9 +531,19 @@ function PendingRow({
 
   const textEl = (
     <div className="flex-1 min-w-0">
-      <p className="text-body-sm text-on-surface font-bold truncate">
-        {tx.description || (isTransfer ? "Transferencia" : tx.category?.name) || "—"}
-      </p>
+      <div className="flex items-center gap-xs flex-wrap">
+        <p className="text-body-sm text-on-surface font-bold truncate">
+          {tx.description || (isTransfer ? "Transferencia" : tx.category?.name) || "—"}
+        </p>
+        {isOverdue && (
+          <span
+            className="shrink-0 text-label-md font-bold px-xs py-[2px] rounded-full"
+            style={{ background: "var(--color-error)", color: "#ffffff" }}
+          >
+            ATRASADA
+          </span>
+        )}
+      </div>
       <p className="text-label-md text-on-surface-variant">
         {tx.account?.name} · {formatDay(tx.occurred_on)}
         {tx.recurring_rule_id && (
