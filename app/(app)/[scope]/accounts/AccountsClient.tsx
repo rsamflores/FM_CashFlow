@@ -77,7 +77,7 @@ export function AccountsClient({ scope, accounts, netByAccount, usedByAccount, t
 
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId) ?? null;
   const accountTxs = selectedAccountId
-    ? transactions.filter((tx) => tx.account_id === selectedAccountId)
+    ? transactions.filter((tx) => tx.account_id === selectedAccountId && tx.is_confirmed)
     : [];
 
   return (
