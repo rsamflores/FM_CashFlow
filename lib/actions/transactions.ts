@@ -460,6 +460,18 @@ export async function confirmTransaction(id: string, scope: Scope) {
       .maybeSingle();
 
     if (ivaExpense?.transfer_id) {
+      // If the income was saved as net (old records), update it to gross (net + IVA)
+      // so the account correctly receives the full amount before IVA is transferred out.
+      // Detection: net/IVA ≈ 6.92, gross/IVA ≈ 7.92 — threshold 7.5 reliably separates them.
+      const ivaAmt = Number(ivaExpense.amount);
+      const incomeAmt = Number(tx.amount);
+      if (ivaAmt > 0 && incomeAmt / ivaAmt < 7.5) {
+        await supabase
+          .from("transactions")
+          .update({ amount: Math.round((incomeAmt + ivaAmt) * 100) / 100 })
+          .eq("id", id);
+      }
+
       await supabase
         .from("transactions")
         .update({ is_confirmed: true })
