@@ -445,6 +445,88 @@ export async function confirmTransaction(id: string, scope: Scope) {
     }
   }
 
+  // Auto-confirm the IVA transfer linked to this business income
+  if (tx.kind === "income" && tx.scope === "business") {
+    const { data: ivaExpense } = await supabase
+      .from("transactions")
+      .select("*, recurring_rule:recurring_rules(*)")
+      .eq("account_id", tx.account_id)
+      .eq("occurred_on", tx.occurred_on)
+      .eq("kind", "expense")
+      .is("category_id", null)
+      .not("transfer_id", "is", null)
+      .eq("is_confirmed", false)
+      .limit(1)
+      .maybeSingle();
+
+    if (ivaExpense?.transfer_id) {
+      await supabase
+        .from("transactions")
+        .update({ is_confirmed: true })
+        .eq("transfer_id", ivaExpense.transfer_id);
+
+      const ivaRule = ivaExpense.recurring_rule as {
+        id: string; frequency: string; next_run: string;
+        account_id: string; category_id: string | null; kind: string;
+        amount: number; description: string | null; is_active: boolean;
+        to_account_id: string | null;
+      } | null;
+
+      if (ivaRule?.is_active) {
+        const { data: ivaLegs } = await supabase
+          .from("transactions")
+          .select("id, kind, account_id, scope")
+          .eq("transfer_id", ivaExpense.transfer_id);
+
+        const ivaFrom = ivaLegs?.find((l: { kind: string }) => l.kind === "expense");
+        const ivaTo   = ivaLegs?.find((l: { kind: string }) => l.kind === "income");
+
+        if (ivaFrom && ivaTo) {
+          const nextTransferId = crypto.randomUUID();
+          const nextDate = nextRunDate(ivaRule.next_run, ivaRule.frequency);
+
+          await supabase.from("transactions").insert([
+            {
+              scope: ivaFrom.scope,
+              account_id: ivaFrom.account_id,
+              category_id: null,
+              kind: "expense",
+              amount: ivaRule.amount,
+              occurred_on: ivaRule.next_run,
+              description: ivaRule.description,
+              is_planned: false,
+              is_confirmed: false,
+              affects_balance: true,
+              transfer_id: nextTransferId,
+              recurring_rule_id: ivaRule.id,
+              created_by: tx.created_by,
+            },
+            {
+              scope: ivaTo.scope,
+              account_id: ivaTo.account_id,
+              category_id: null,
+              kind: "income",
+              amount: ivaRule.amount,
+              occurred_on: ivaRule.next_run,
+              description: ivaRule.description,
+              is_planned: false,
+              is_confirmed: false,
+              affects_balance: true,
+              transfer_id: nextTransferId,
+              recurring_rule_id: ivaRule.id,
+              created_by: tx.created_by,
+            },
+          ]);
+
+          await supabase
+            .from("recurring_rules")
+            .update({ next_run: nextDate })
+            .eq("id", ivaRule.id);
+        }
+      }
+    }
+  }
+
   // Notify the transaction creator if someone else confirmed it
   const createdBy = (tx as unknown as { created_by?: string }).created_by;
   if (createdBy && confirmer && createdBy !== confirmer.id) {
