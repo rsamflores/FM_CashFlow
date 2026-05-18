@@ -297,7 +297,7 @@ export function TransactionsClient({ scope, transactions, accounts, categories, 
         <div className="bg-surface-container-low rounded-2xl border border-outline-variant/10 overflow-hidden">
           {/* Table header — desktop only */}
           <div className="hidden md:grid px-lg py-sm border-b border-outline-variant/10"
-            style={{ gridTemplateColumns: "1fr 140px 130px 100px 72px" }}>
+            style={{ gridTemplateColumns: "1fr 200px 130px 100px 72px" }}>
             <span className="text-label-md text-on-surface-variant">Descripción / Categoría</span>
             <span className="text-label-md text-on-surface-variant">Cuenta</span>
             <span className="text-label-md text-on-surface-variant">Fecha</span>
@@ -440,7 +440,7 @@ function TransactionRow({
   return (
     <div className="border-t border-outline-variant/10 hover:bg-surface-container transition-colors">
       {/* Desktop row */}
-      <div className="hidden md:grid px-lg py-sm items-center" style={{ gridTemplateColumns: "1fr 140px 130px 100px 72px" }}>
+      <div className="hidden md:grid px-lg py-sm items-center" style={{ gridTemplateColumns: "1fr 200px 130px 100px 72px" }}>
         <div className="flex items-center gap-sm min-w-0">{iconEl}{descEl}{badgeEl}</div>
         <div className="flex items-center gap-xs">
           <div className="w-2 h-2 rounded-full shrink-0" style={{ background: tx.account?.color ?? "var(--color-outline)" }} />
