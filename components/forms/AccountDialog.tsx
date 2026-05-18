@@ -64,10 +64,10 @@ export function AccountDialog({ scope, open, onClose, editAccount }: Props) {
         onClick={onClose}
       />
       <div
-        className="relative z-10 bg-surface-container rounded-2xl border border-outline-variant/20 shadow-2xl w-full"
-        style={{ maxWidth: 480, margin: "0 16px" }}
+        className="relative z-10 bg-surface-container rounded-2xl border border-outline-variant/20 shadow-2xl w-full flex flex-col"
+        style={{ maxWidth: 480, margin: "0 16px", maxHeight: "90dvh" }}
       >
-        <div className="flex items-center justify-between p-lg border-b border-outline-variant/10">
+        <div className="flex items-center justify-between p-lg border-b border-outline-variant/10 shrink-0">
           <h2 className="text-title-md text-on-surface">
             {editAccount ? "Editar cuenta" : "Nueva cuenta"}
           </h2>
@@ -82,7 +82,7 @@ export function AccountDialog({ scope, open, onClose, editAccount }: Props) {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-lg flex flex-col gap-lg">
+        <form onSubmit={handleSubmit} className="p-lg flex flex-col gap-lg overflow-y-auto">
           <div className="flex flex-col gap-xs">
             <label className="text-label-md text-on-surface-variant">
               Nombre de la cuenta *
