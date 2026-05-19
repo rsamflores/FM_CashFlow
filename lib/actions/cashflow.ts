@@ -35,12 +35,6 @@ function formatLabel(dateStr: string): string {
   return date.toLocaleDateString("es-SV", { day: "numeric", month: "short" });
 }
 
-function isLastDayOfMonth(dateStr: string): boolean {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const lastDay = new Date(y, m, 0).getDate();
-  return d === lastDay;
-}
-
 export async function getCashFlowProjection(
   scope: Scope,
   days: 30 | 60 | 90,
@@ -77,18 +71,9 @@ export async function getCashFlowProjection(
     .reduce((s, a) => s + (balanceByAccount[a.id] ?? 0), 0);
 
   // ── 2. Recurring rules ─────────────────────────────────────────────────────
-  const { data: rules } = await admin
-    .from("recurring_rules")
-    .select("id, kind, amount, frequency, next_run, end_date, category:categories(name)")
-    .eq("scope", scope)
-    .eq("is_active", true)
-    .not("to_account_id", "is", null)  // exclude pure-transfer rules
-    .or("to_account_id.is.null");      // include non-transfer rules
-
-  // Actually fetch all active rules regardless of transfer
   const { data: allRules } = await admin
     .from("recurring_rules")
-    .select("id, kind, amount, frequency, next_run, end_date, to_account_id, category:categories(name)")
+    .select("id, kind, amount, frequency, next_run, end_date, to_account_id, category_id, category:categories(name)")
     .eq("scope", scope)
     .eq("is_active", true);
 
@@ -118,17 +103,11 @@ export async function getCashFlowProjection(
     }
   }
 
-  let remainingBudget = 0;
-  const budgetEvents: string[] = [];
-  for (const b of budgetsRes.data ?? []) {
-    const remaining = Math.max(0, Number(b.expected_amount) - (spentByCategory[b.category_id] ?? 0));
-    if (remaining > 0) {
-      remainingBudget += remaining;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const catName = (b.category as any)?.name ?? "Presupuesto";
-      budgetEvents.push(`${catName}: -$${remaining.toFixed(2)}`);
-    }
-  }
+  // Categories with a defined budget — recurring rules of these categories are
+  // skipped in the simulation to avoid double-counting (budget wins).
+  const budgetedCategoryIds = new Set<string>(
+    (budgetsRes.data ?? []).map((b) => b.category_id),
+  );
 
   // ── 4. Build day-by-day event map ──────────────────────────────────────────
   const eventDeltas: Map<string, { delta: number; labels: string[] }> = new Map();
@@ -145,6 +124,8 @@ export async function getCashFlowProjection(
     if (!rule.next_run) continue;
     // Skip internal transfers (both legs cancel out)
     if (rule.to_account_id && rule.kind === "expense") continue;
+    // Budget wins: skip recurring rules whose category is already budgeted
+    if (rule.category_id && budgetedCategoryIds.has(rule.category_id)) continue;
 
     let current = rule.next_run;
     while (current <= endDateStr) {
@@ -160,14 +141,30 @@ export async function getCashFlowProjection(
     }
   }
 
-  // Remaining budget → end of current month
-  const lastDayCurrentMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-    .toLocaleDateString("en-CA");
-  if (remainingBudget > 0 && lastDayCurrentMonth <= endDateStr) {
-    const budgetLabel = budgetEvents.length
-      ? `Presupuestos restantes: -$${remainingBudget.toFixed(2)}`
-      : "-";
-    addEvent(lastDayCurrentMonth, -remainingBudget, budgetLabel);
+  // Budgets → applied at the last day of every month within the projection window.
+  // Current month: only the remaining (expected - already spent).
+  // Future months: full expected amount (budgets repeat every month).
+  let cursor = new Date(today.getFullYear(), today.getMonth(), 1);
+  const safetyMax = 24; // bounded loop — at most 24 months even for 90-day window
+  let iter = 0;
+  while (iter++ < safetyMax) {
+    const y = cursor.getFullYear();
+    const m = cursor.getMonth();
+    const lastDay = new Date(y, m + 1, 0).toLocaleDateString("en-CA");
+    if (lastDay > endDateStr) break;
+
+    const isCurrentMonth = y === today.getFullYear() && m === today.getMonth();
+    for (const b of budgetsRes.data ?? []) {
+      const expected = Number(b.expected_amount);
+      const debit = isCurrentMonth
+        ? Math.max(0, expected - (spentByCategory[b.category_id] ?? 0))
+        : expected;
+      if (debit <= 0) continue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const catName = (b.category as any)?.name ?? "Presupuesto";
+      addEvent(lastDay, -debit, `${catName}: -$${debit.toFixed(2)}`);
+    }
+    cursor = new Date(y, m + 1, 1);
   }
 
   // ── 5. Build series ────────────────────────────────────────────────────────
