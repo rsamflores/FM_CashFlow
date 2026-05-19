@@ -115,12 +115,14 @@ export async function getTransactionsForMonth(scope: Scope, yearMonth: string): 
   const toMonth = m === 12 ? 1 : m + 1;
   const to = `${toYear}-${String(toMonth).padStart(2, "0")}-01`;
 
-  const supabase = await createClient();
+  // Use admin client so employee-created transactions (affects_balance=false) are visible
+  // to the admin without RLS blocking cross-user visibility.
+  const admin = createAdminClient();
 
   // Fetch confirmed transactions for the selected month AND all pending transactions
   // regardless of date — pending items must always be visible until the user confirms them.
   const [confirmedRes, pendingRes] = await Promise.all([
-    supabase
+    admin
       .from("transactions")
       .select("*, account:accounts(name,color), category:categories(name,color,icon)")
       .eq("scope", scope)
@@ -128,7 +130,7 @@ export async function getTransactionsForMonth(scope: Scope, yearMonth: string): 
       .gte("occurred_on", from)
       .lt("occurred_on", to)
       .order("occurred_on", { ascending: false }),
-    supabase
+    admin
       .from("transactions")
       .select("*, account:accounts(name,color), category:categories(name,color,icon)")
       .eq("scope", scope)
