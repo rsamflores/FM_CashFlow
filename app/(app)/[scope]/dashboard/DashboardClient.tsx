@@ -8,6 +8,8 @@ import { formatCurrency, formatDay, formatShortDay } from "@/lib/format";
 import type { TransactionRow } from "@/lib/actions/transactions";
 import type { AccountRow } from "@/lib/actions/accounts";
 import type { BudgetRow } from "@/lib/actions/budgets";
+import type { CashFlowProjection } from "@/lib/actions/cashflow";
+import { CashFlowChart } from "@/components/charts/CashFlowChart";
 
 type MonthlyBar = { month: string; income: number; expense: number };
 type CategorySlice = { name: string; color: string; amount: number; icon: string };
@@ -50,6 +52,7 @@ type Props = {
   projectedTotal: number;
   projectedRemainder: number;
   accountProjections: AccountProjection[];
+  cashFlowProjections: { 30: CashFlowProjection; 60: CashFlowProjection; 90: CashFlowProjection };
 };
 
 export function DashboardClient({
@@ -75,6 +78,7 @@ export function DashboardClient({
   projectedTotal,
   projectedRemainder,
   accountProjections,
+  cashFlowProjections,
 }: Props) {
   const net = monthIncome - monthExpense;
   const [period, setPeriod] = useState<Period>("6m");
@@ -428,6 +432,9 @@ export function DashboardClient({
           </div>
         </div>
       )}
+
+      {/* Cash Flow Projection Chart */}
+      <CashFlowChart projections={cashFlowProjections} />
 
       <div className={`grid gap-lg ${budgets.length > 0 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"}`}>
         {/* Recent transactions */}

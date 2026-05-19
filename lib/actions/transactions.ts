@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 import type { Scope } from "@/lib/scope";
 import { insertNotifications, getScopeManagers } from "@/lib/actions/notifications";
+import { checkBudgetAlerts } from "@/lib/actions/budgets";
 
 const TransactionSchema = z.object({
   kind: z.enum(["income", "expense"]),
@@ -338,6 +339,10 @@ export async function createTransaction(scope: Scope, formData: FormData) {
   }
 
   revalidateScope(scope);
+  // Fire budget alerts if this is an employee expense (affects_balance=false)
+  if (parsed.data.kind === "expense" && !parsed.data.affects_balance) {
+    checkBudgetAlerts(scope, parsed.data.category_id).catch(() => {});
+  }
   return { success: true };
 }
 
@@ -592,6 +597,10 @@ export async function confirmTransaction(id: string, scope: Scope) {
   }
 
   revalidateScope(scope);
+  // Fire budget alert check after confirming any expense
+  if (tx.kind === "expense" && tx.category_id) {
+    checkBudgetAlerts(scope, tx.category_id).catch(() => {});
+  }
   return { success: true };
 }
 
