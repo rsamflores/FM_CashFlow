@@ -51,10 +51,10 @@ export function EmployeeClient({
   const [txDialogOpen, setTxDialogOpen] = useState(false);
   const [reimbDialogOpen, setReimbDialogOpen] = useState(false);
 
-  // Compute spent per category (confirmed expenses, regardless of affects_balance)
+  // Compute spent per category (confirmed + pending expenses)
   const spentByCategory: Record<string, number> = {};
   for (const tx of transactions) {
-    if (tx.kind === "expense" && tx.is_confirmed && tx.category_id) {
+    if (tx.kind === "expense" && tx.category_id) {
       spentByCategory[tx.category_id] = (spentByCategory[tx.category_id] ?? 0) + Number(tx.amount);
     }
   }
