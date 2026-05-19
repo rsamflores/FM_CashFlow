@@ -2,8 +2,10 @@ import { notFound } from "next/navigation";
 import { Topbar } from "@/components/shell/Topbar";
 import { isValidScope, SCOPE_LABEL } from "@/lib/scope";
 import { getTransactionsFrom } from "@/lib/actions/transactions";
+import { getMonthClosure } from "@/lib/actions/closures";
 import { formatMonth, svToday } from "@/lib/format";
 import { ReportsClient } from "./ReportsClient";
+import { MonthClosureCard } from "./MonthClosureCard";
 
 export default async function ReportsPage({
   params,
@@ -16,11 +18,18 @@ export default async function ReportsPage({
   const { year, month } = svToday();
   const currentMonth = `${year}-${String(month + 1).padStart(2, "0")}`;
 
+  // Most recently finished month (previous month relative to today)
+  const prevDate = new Date(year, month - 1, 1);
+  const prevYearMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+
   // Fetch confirmed transactions from the last 24 months, excluding the current month
   const from = new Date(year, month - 23, 1);
   const fromStr = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, "0")}-01`;
 
-  const transactions = await getTransactionsFrom(scope, fromStr);
+  const [transactions, closure] = await Promise.all([
+    getTransactionsFrom(scope, fromStr),
+    getMonthClosure(scope, prevYearMonth),
+  ]);
 
   // Only past months (exclude current month and unconfirmed)
   const past = transactions.filter(
@@ -66,6 +75,7 @@ export default async function ReportsPage({
           Mes actual
         </a>
       </header>
+      <MonthClosureCard closure={closure} />
       <ReportsClient months={months} />
     </>
   );
