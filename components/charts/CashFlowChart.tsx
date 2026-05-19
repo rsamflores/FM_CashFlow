@@ -159,7 +159,7 @@ export function CashFlowChart({ projections }: Props) {
         </div>
       )}
 
-      {/* Rolled-budgets banner */}
+      {/* Rolled-budgets banner (defense-in-depth — debería rara vez aparecer) */}
       {rolledFromLabel && (
         <div
           className="flex items-center gap-sm px-lg py-sm text-body-sm border-b border-outline-variant/10"
@@ -167,7 +167,7 @@ export function CashFlowChart({ projections }: Props) {
         >
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>info</span>
           <span>
-            Aún no has definido presupuestos para este mes. Usando los de <strong>{rolledFromLabel}</strong> como plantilla para la proyección.
+            Proyección usando los presupuestos de <strong>{rolledFromLabel}</strong> como plantilla.
           </span>
         </div>
       )}

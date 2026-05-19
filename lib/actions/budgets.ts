@@ -2,8 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 import type { Scope } from "@/lib/scope";
+import { insertNotifications, getScopeManagers } from "@/lib/actions/notifications";
+import { svToday } from "@/lib/format";
 
 const BudgetSchema = z.object({
   category_id: z.string().uuid("Selecciona una categoría"),
@@ -30,6 +33,21 @@ export type BudgetRow = {
 
 export async function getBudgets(scope: Scope, periodMonth: string): Promise<BudgetRow[]> {
   const supabase = await createClient();
+
+  // Auto-roll: if the user hasn't created budgets for this month yet, copy the
+  // most recent prior month's budgets (preserving amounts, accounts, notes,
+  // single-payment flag). Progress bars naturally reset because the spent
+  // tally is filtered by current-month transactions.
+  const { count } = await supabase
+    .from("planned_budgets")
+    .select("id", { count: "exact", head: true })
+    .eq("scope", scope)
+    .eq("period_month", periodMonth);
+
+  if ((count ?? 0) === 0) {
+    await materializeBudgetsFromPriorMonth(scope, periodMonth);
+  }
+
   const { data, error } = await supabase
     .from("planned_budgets")
     .select("*, category:categories(name,color,icon), account:accounts(name,color)")
@@ -39,6 +57,45 @@ export async function getBudgets(scope: Scope, periodMonth: string): Promise<Bud
 
   if (error) throw error;
   return (data ?? []) as BudgetRow[];
+}
+
+// Internal: rolls the most recent prior month's budgets into the given month.
+// Uses the admin client to insert under the existing RLS policies.
+async function materializeBudgetsFromPriorMonth(scope: Scope, periodMonth: string): Promise<void> {
+  const admin = createAdminClient();
+
+  const { data: prior } = await admin
+    .from("planned_budgets")
+    .select("period_month")
+    .eq("scope", scope)
+    .lt("period_month", periodMonth)
+    .order("period_month", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!prior?.period_month) return;
+
+  const { data: priorBudgets } = await admin
+    .from("planned_budgets")
+    .select("category_id, account_id, expected_amount, note, is_single_payment")
+    .eq("scope", scope)
+    .eq("period_month", prior.period_month);
+
+  if (!priorBudgets || priorBudgets.length === 0) return;
+
+  const rows = priorBudgets.map((b) => ({
+    scope,
+    category_id: b.category_id,
+    account_id: b.account_id,
+    expected_amount: b.expected_amount,
+    note: b.note,
+    is_single_payment: b.is_single_payment,
+    period_month: periodMonth,
+  }));
+
+  await admin
+    .from("planned_budgets")
+    .upsert(rows, { onConflict: "scope,category_id,period_month" });
 }
 
 export async function upsertBudget(scope: Scope, formData: FormData) {
@@ -77,9 +134,6 @@ export async function deleteBudget(id: string, scope: Scope) {
 }
 
 // ── Budget alert checks ────────────────────────────────────────────────────
-import { createAdminClient } from "@/lib/supabase/admin";
-import { insertNotifications, getScopeManagers } from "@/lib/actions/notifications";
-import { svToday } from "@/lib/format";
 
 /**
  * After any transaction is created/confirmed, call this to fire 80%/100% alerts.
