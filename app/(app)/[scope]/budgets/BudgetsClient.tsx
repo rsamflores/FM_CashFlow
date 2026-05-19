@@ -22,10 +22,10 @@ export function BudgetsClient({ scope, budgets, categories, transactions, accoun
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editBudget, setEditBudget] = useState<BudgetRow | undefined>();
 
-  // Compute spent per category this month (confirmed only)
+  // Compute spent per category this month (confirmed + pending)
   const spentByCategory: Record<string, number> = {};
   for (const tx of transactions) {
-    if (tx.kind === "expense" && tx.is_confirmed) {
+    if (tx.kind === "expense" && tx.category_id) {
       spentByCategory[tx.category_id] = (spentByCategory[tx.category_id] ?? 0) + Number(tx.amount);
     }
   }
