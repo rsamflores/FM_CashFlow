@@ -257,6 +257,9 @@ export async function createTransaction(scope: Scope, formData: FormData) {
   let receiptUrl: string | null = null;
   const receiptFile = formData.get("receipt") as File | null;
   if (receiptFile && receiptFile.size > 0) {
+    // Ensure bucket exists (idempotent — ignores "already exists" error)
+    await adminClient.storage.createBucket("receipts", { public: true });
+
     const ext = receiptFile.name.split(".").pop()?.toLowerCase() ?? "jpg";
     const fileName = `${scope}/${user.id}/${crypto.randomUUID()}.${ext}`;
     const buffer = Buffer.from(await receiptFile.arrayBuffer());
