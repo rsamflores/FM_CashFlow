@@ -72,14 +72,13 @@ export default async function EmployeePage({
           .eq("period_month", currentMonth)
           .in("category_id", assignedCategoryIds)
       : Promise.resolve({ data: [], error: null }),
-    // Employee's own expenses in assigned categories — no date filter (backdated + pending always visible)
+    // All expenses in assigned categories — no date or creator filter (backdated + pending always visible)
     assignedCategoryIds.length > 0
       ? admin
           .from("transactions")
           .select("*, account:accounts(name,color), category:categories(name,color,icon)")
           .eq("scope", scope)
           .eq("kind", "expense")
-          .eq("created_by", user.id)
           .in("category_id", assignedCategoryIds)
           .order("occurred_on", { ascending: false })
       : Promise.resolve({ data: [], error: null }),
