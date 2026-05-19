@@ -69,6 +69,13 @@ export default async function DashboardPage({
   const thisMonthConfirmed = confirmed.filter((tx) =>
     tx.occurred_on >= currentMonthStr && tx.occurred_on < nextMonthStr
   );
+
+  // Current month all expenses (confirmed + pending) — for budget progress bars
+  const thisMonthAllExpenses = transactions.filter((tx) =>
+    tx.kind === "expense" &&
+    !tx.transfer_id &&
+    tx.occurred_on >= currentMonthStr && tx.occurred_on < nextMonthStr
+  );
   const monthIncome = thisMonthConfirmed
     .filter((t) => t.kind === "income")
     .reduce((s, t) => s + Number(t.amount), 0);
@@ -143,10 +150,10 @@ export default async function DashboardPage({
     spentByCategoryReal[tx.category_id] = (spentByCategoryReal[tx.category_id] ?? 0) + Number(tx.amount);
   }
 
-  // Per-category spend (all expenses) — matches the budget page totals
+  // Per-category spend (confirmed + pending) — matches the budget page totals
   const spentByCategory: Record<string, number> = {};
-  for (const tx of thisMonthConfirmed.filter((t) => t.kind === "expense")) {
-    spentByCategory[tx.category_id] = (spentByCategory[tx.category_id] ?? 0) + Number(tx.amount);
+  for (const tx of thisMonthAllExpenses) {
+    if (tx.category_id) spentByCategory[tx.category_id] = (spentByCategory[tx.category_id] ?? 0) + Number(tx.amount);
   }
 
   // Total budgeted: single-payment executed budgets count actual spend, not expected
