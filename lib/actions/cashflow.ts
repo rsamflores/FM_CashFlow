@@ -16,6 +16,9 @@ export type CashFlowProjection = {
   minBalance: number;
   minDate: string | null;
   dangerDays: number; // days where balance < 0
+  // When the current month has no budgets, we fall back to a previous month
+  // and use those as a template. These fields surface that fact to the UI.
+  budgetsRolledFromMonth: string | null; // e.g. "2026-05-01" or null
 };
 
 function advanceDate(dateStr: string, frequency: string): string {
@@ -82,7 +85,7 @@ export async function getCashFlowProjection(
   const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
   const monthEnd = nextMonthDate.toLocaleDateString("en-CA");
 
-  const [budgetsRes, thisMonthExpRes] = await Promise.all([
+  const [budgetsCurrentRes, thisMonthExpRes] = await Promise.all([
     admin.from("planned_budgets")
       .select("category_id, expected_amount, category:categories(name)")
       .eq("scope", scope)
@@ -95,6 +98,37 @@ export async function getCashFlowProjection(
       .gte("occurred_on", monthStart)
       .lt("occurred_on", monthEnd),
   ]);
+
+  // Auto-roll: if the user hasn't created budgets for the current month yet,
+  // fall back to the most recent month that does have budgets. This keeps the
+  // projection meaningful right after a month rollover.
+  let budgetsRes = budgetsCurrentRes;
+  let budgetsAreRolledFromPrior = false;
+  let rolledFromMonth: string | null = null;
+  if (!budgetsCurrentRes.data || budgetsCurrentRes.data.length === 0) {
+    const { data: priorPeriodRow } = await admin
+      .from("planned_budgets")
+      .select("period_month")
+      .eq("scope", scope)
+      .lt("period_month", monthStart)
+      .order("period_month", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (priorPeriodRow?.period_month) {
+      const priorMonth = priorPeriodRow.period_month as string;
+      const priorRes = await admin
+        .from("planned_budgets")
+        .select("category_id, expected_amount, category:categories(name)")
+        .eq("scope", scope)
+        .eq("period_month", priorMonth);
+      if (priorRes.data && priorRes.data.length > 0) {
+        budgetsRes = priorRes;
+        budgetsAreRolledFromPrior = true;
+        rolledFromMonth = priorMonth;
+      }
+    }
+  }
 
   const spentByCategory: Record<string, number> = {};
   for (const tx of thisMonthExpRes.data ?? []) {
@@ -213,5 +247,12 @@ export async function getCashFlowProjection(
     thinned.push(series[series.length - 1]);
   }
 
-  return { series: thinned, currentBalance, minBalance, minDate, dangerDays };
+  return {
+    series: thinned,
+    currentBalance,
+    minBalance,
+    minDate,
+    dangerDays,
+    budgetsRolledFromMonth: budgetsAreRolledFromPrior ? rolledFromMonth : null,
+  };
 }

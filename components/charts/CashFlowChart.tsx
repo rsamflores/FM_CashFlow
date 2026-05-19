@@ -56,7 +56,14 @@ function CustomTooltip({ active, payload, label }: any) {
 export function CashFlowChart({ projections }: Props) {
   const [days, setDays] = useState<Days>(30);
   const projection = projections[days];
-  const { series, currentBalance, minBalance, minDate, dangerDays } = projection;
+  const { series, currentBalance, minBalance, minDate, dangerDays, budgetsRolledFromMonth } = projection;
+
+  const rolledFromLabel = budgetsRolledFromMonth
+    ? new Date(budgetsRolledFromMonth + "T12:00:00").toLocaleDateString("es-SV", {
+        month: "long",
+        year: "numeric",
+      })
+    : null;
 
   const hasNegative = dangerDays > 0;
   const minBalanceNegative = minBalance < 0;
@@ -148,6 +155,19 @@ export function CashFlowChart({ projections }: Props) {
           <span>
             El saldo proyectado cae bajo $0 durante {dangerDays} día{dangerDays !== 1 ? "s" : ""}.
             {minDateLabel && ` El punto más bajo es el ${minDateLabel} con ${formatCurrency(minBalance)}.`}
+          </span>
+        </div>
+      )}
+
+      {/* Rolled-budgets banner */}
+      {rolledFromLabel && (
+        <div
+          className="flex items-center gap-sm px-lg py-sm text-body-sm border-b border-outline-variant/10"
+          style={{ background: "var(--color-tertiary)12", color: "var(--color-tertiary)" }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>info</span>
+          <span>
+            Aún no has definido presupuestos para este mes. Usando los de <strong>{rolledFromLabel}</strong> como plantilla para la proyección.
           </span>
         </div>
       )}
