@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useEffect } from "react";
 import { createReimbursementRequest, getMyExpensesForReimbursement } from "@/lib/actions/reimbursements";
+import { getMyBankAccounts, saveBankAccount, deleteBankAccount, type EmployeeBankAccount } from "@/lib/actions/employee_bank_accounts";
 import type { TransactionRow } from "@/lib/actions/transactions";
 import { formatCurrency, formatDay } from "@/lib/format";
 import type { Scope } from "@/lib/scope";
@@ -28,6 +29,14 @@ export function ReimbursementRequestDialog({ open, onClose, scope }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  // Saved bank accounts
+  const [savedAccounts, setSavedAccounts] = useState<EmployeeBankAccount[]>([]);
+  const [selectedSavedId, setSelectedSavedId] = useState<string | null>(null);
+  const [saveLabel, setSaveLabel] = useState("");
+  const [wantToSave, setWantToSave] = useState(false);
+  const [savingAccount, startSaveTransition] = useTransition();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   useEffect(() => {
     if (open) {
       setStep(1);
@@ -39,14 +48,51 @@ export function ReimbursementRequestDialog({ open, onClose, scope }: Props) {
       setNotes("");
       setError(null);
       setSuccess(false);
-      // Load available expenses
+      setSelectedSavedId(null);
+      setSaveLabel("");
+      setWantToSave(false);
+      // Load expenses and saved bank accounts in parallel
       setLoadingExpenses(true);
-      getMyExpensesForReimbursement(scope)
-        .then(setExpenses)
-        .catch(() => setExpenses([]))
-        .finally(() => setLoadingExpenses(false));
+      Promise.all([
+        getMyExpensesForReimbursement(scope),
+        getMyBankAccounts(),
+      ]).then(([exps, accounts]) => {
+        setExpenses(exps);
+        setSavedAccounts(accounts);
+        // Auto-select default account
+        const def = accounts.find((a) => a.is_default);
+        if (def) applyAccount(def);
+      }).catch(() => {
+        setExpenses([]);
+        setSavedAccounts([]);
+      }).finally(() => setLoadingExpenses(false));
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, scope]);
+
+  function applyAccount(acc: EmployeeBankAccount) {
+    setSelectedSavedId(acc.id);
+    setBankName(acc.bank_name);
+    setAccountNumber(acc.account_number);
+    setAccountType(acc.account_type);
+    setAccountHolder(acc.account_holder);
+  }
+
+  function clearSavedSelection() {
+    setSelectedSavedId(null);
+    setBankName("");
+    setAccountNumber("");
+    setAccountType("checking");
+    setAccountHolder("");
+  }
+
+  function handleDeleteSaved(id: string) {
+    setDeletingId(id);
+    deleteBankAccount(id).then(() => {
+      setSavedAccounts((prev) => prev.filter((a) => a.id !== id));
+      if (selectedSavedId === id) clearSavedSelection();
+    }).finally(() => setDeletingId(null));
+  }
 
   function toggleExpense(id: string) {
     setSelectedIds((prev) =>
@@ -78,6 +124,19 @@ export function ReimbursementRequestDialog({ open, onClose, scope }: Props) {
     startTransition(async () => {
       const res = await createReimbursementRequest(scope, fd);
       if ("error" in res) { setError(res.error); return; }
+
+      // Optionally save the bank account for future use
+      if (wantToSave && !selectedSavedId && saveLabel.trim()) {
+        const sfd = new FormData();
+        sfd.set("label", saveLabel.trim());
+        sfd.set("bank_name", bankName);
+        sfd.set("account_number", accountNumber);
+        sfd.set("account_type", accountType);
+        sfd.set("account_holder", accountHolder);
+        sfd.set("is_default", savedAccounts.length === 0 ? "true" : "false");
+        await saveBankAccount(sfd);
+      }
+
       setSuccess(true);
       setTimeout(onClose, 1800);
     });
@@ -273,6 +332,70 @@ export function ReimbursementRequestDialog({ open, onClose, scope }: Props) {
                 </button>
               </div>
 
+              {/* Saved bank accounts */}
+              {savedAccounts.length > 0 && (
+                <div className="flex flex-col gap-xs">
+                  <p className="text-label-md text-on-surface-variant">Cuentas guardadas</p>
+                  {savedAccounts.map((acc) => {
+                    const isSelected = selectedSavedId === acc.id;
+                    return (
+                      <div
+                        key={acc.id}
+                        className="flex items-center gap-sm rounded-xl border px-md py-sm transition-all"
+                        style={{
+                          borderColor: isSelected ? "var(--color-primary)" : "var(--color-outline-variant)",
+                          background: isSelected ? "var(--color-primary)10" : "transparent",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => isSelected ? clearSavedSelection() : applyAccount(acc)}
+                          className="flex-1 flex items-center gap-sm text-left"
+                        >
+                          <div
+                            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                            style={{ background: isSelected ? "var(--color-primary)20" : "var(--color-surface-container-high)" }}
+                          >
+                            <span className="material-symbols-outlined" style={{ fontSize: 16, color: isSelected ? "var(--color-primary)" : "var(--color-on-surface-variant)" }}>
+                              account_balance
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-body-sm font-bold text-on-surface flex items-center gap-xs">
+                              {acc.label}
+                              {acc.is_default && (
+                                <span className="text-label-md font-bold px-xs py-[2px] rounded-full"
+                                  style={{ background: "var(--color-tertiary)20", color: "var(--color-tertiary)" }}>
+                                  Predeterminada
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-label-md text-on-surface-variant truncate">
+                              {acc.bank_name} · {acc.account_type === "checking" ? "Corriente" : "Ahorros"} · {acc.account_number}
+                            </p>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSaved(acc.id)}
+                          disabled={deletingId === acc.id}
+                          className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-error/10 transition-colors shrink-0"
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: 16, color: "var(--color-error)" }}>
+                            {deletingId === acc.id ? "progress_activity" : "delete"}
+                          </span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                  <div className="flex items-center gap-sm my-xs">
+                    <div className="flex-1 h-px" style={{ background: "var(--color-outline-variant)" }} />
+                    <span className="text-label-md text-on-surface-variant">o ingresa manualmente</span>
+                    <div className="flex-1 h-px" style={{ background: "var(--color-outline-variant)" }} />
+                  </div>
+                </div>
+              )}
+
               {/* Bank name */}
               <div>
                 <label className="text-label-md text-on-surface-variant block mb-xs">Banco *</label>
@@ -280,7 +403,7 @@ export function ReimbursementRequestDialog({ open, onClose, scope }: Props) {
                   type="text"
                   required
                   value={bankName}
-                  onChange={(e) => setBankName(e.target.value)}
+                  onChange={(e) => { setBankName(e.target.value); setSelectedSavedId(null); }}
                   placeholder="Ej: Banco Agrícola"
                   className="w-full h-10 px-md rounded-lg bg-surface-container-high border-none outline-none focus:ring-2 focus:ring-primary-container text-body-sm text-on-surface placeholder:text-on-surface-variant/40"
                 />
@@ -293,7 +416,7 @@ export function ReimbursementRequestDialog({ open, onClose, scope }: Props) {
                   type="text"
                   required
                   value={accountNumber}
-                  onChange={(e) => setAccountNumber(e.target.value)}
+                  onChange={(e) => { setAccountNumber(e.target.value); setSelectedSavedId(null); }}
                   placeholder="Ej: 0000-0000-0000"
                   className="w-full h-10 px-md rounded-lg bg-surface-container-high border-none outline-none focus:ring-2 focus:ring-primary-container text-body-sm text-on-surface placeholder:text-on-surface-variant/40"
                 />
@@ -328,11 +451,45 @@ export function ReimbursementRequestDialog({ open, onClose, scope }: Props) {
                   type="text"
                   required
                   value={accountHolder}
-                  onChange={(e) => setAccountHolder(e.target.value)}
+                  onChange={(e) => { setAccountHolder(e.target.value); setSelectedSavedId(null); }}
                   placeholder="Nombre completo del titular"
                   className="w-full h-10 px-md rounded-lg bg-surface-container-high border-none outline-none focus:ring-2 focus:ring-primary-container text-body-sm text-on-surface placeholder:text-on-surface-variant/40"
                 />
               </div>
+
+              {/* Save for future use — only shown when manually filling (no saved account selected) */}
+              {!selectedSavedId && (
+                <div
+                  className="rounded-xl border p-sm flex flex-col gap-sm transition-colors"
+                  style={{ borderColor: wantToSave ? "var(--color-tertiary)" : "var(--color-outline-variant)", background: wantToSave ? "var(--color-tertiary)08" : "transparent" }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setWantToSave((v) => !v)}
+                    className="flex items-center gap-sm text-left"
+                  >
+                    <div
+                      className="w-5 h-5 rounded flex items-center justify-center shrink-0 transition-colors"
+                      style={{
+                        background: wantToSave ? "var(--color-tertiary)" : "transparent",
+                        border: `2px solid ${wantToSave ? "var(--color-tertiary)" : "var(--color-outline-variant)"}`,
+                      }}
+                    >
+                      {wantToSave && <span className="material-symbols-outlined" style={{ fontSize: 14, color: "var(--color-on-tertiary)" }}>check</span>}
+                    </div>
+                    <span className="text-body-sm text-on-surface">Guardar esta cuenta para futuros reembolsos</span>
+                  </button>
+                  {wantToSave && (
+                    <input
+                      type="text"
+                      value={saveLabel}
+                      onChange={(e) => setSaveLabel(e.target.value)}
+                      placeholder='Alias (ej: "Mi cuenta BAC")'
+                      className="w-full h-9 px-md rounded-lg bg-surface-container-high border-none outline-none focus:ring-2 focus:ring-tertiary text-body-sm text-on-surface placeholder:text-on-surface-variant/40"
+                    />
+                  )}
+                </div>
+              )}
 
               {/* Notes */}
               <div>
