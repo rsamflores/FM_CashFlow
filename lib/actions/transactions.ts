@@ -48,6 +48,7 @@ function revalidateScope(scope: Scope) {
   revalidatePath(`/${scope}/accounts`);
   revalidatePath(`/${scope}/dashboard`);
   revalidatePath(`/${scope}/budgets`);
+  revalidatePath(`/${scope}/employee`);
   // Business income may land in personal cash accounts — keep personal pages fresh
   if (scope === "business") {
     revalidatePath("/personal/accounts");
