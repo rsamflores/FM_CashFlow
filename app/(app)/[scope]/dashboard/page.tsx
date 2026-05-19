@@ -150,10 +150,12 @@ export default async function DashboardPage({
     spentByCategoryReal[tx.category_id] = (spentByCategoryReal[tx.category_id] ?? 0) + Number(tx.amount);
   }
 
-  // Per-category spend (confirmed + pending) — matches the budget page totals
+  // Confirmed expenses always count; pending only if affects_balance=false (employee-submitted)
   const spentByCategory: Record<string, number> = {};
   for (const tx of thisMonthAllExpenses) {
-    if (tx.category_id) spentByCategory[tx.category_id] = (spentByCategory[tx.category_id] ?? 0) + Number(tx.amount);
+    if (tx.category_id && (tx.is_confirmed || !tx.affects_balance)) {
+      spentByCategory[tx.category_id] = (spentByCategory[tx.category_id] ?? 0) + Number(tx.amount);
+    }
   }
 
   // Total budgeted: single-payment executed budgets count actual spend, not expected

@@ -23,10 +23,10 @@ export function BudgetsClient({ scope, budgets, categories, transactions, accoun
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editBudget, setEditBudget] = useState<BudgetRow | undefined>();
 
-  // Compute spent per category this month (confirmed + pending)
+  // Confirmed expenses always count; pending only if affects_balance=false (employee-submitted)
   const spentByCategory: Record<string, number> = {};
   for (const tx of transactions) {
-    if (tx.kind === "expense" && tx.category_id) {
+    if (tx.kind === "expense" && tx.category_id && (tx.is_confirmed || !tx.affects_balance)) {
       spentByCategory[tx.category_id] = (spentByCategory[tx.category_id] ?? 0) + Number(tx.amount);
     }
   }
