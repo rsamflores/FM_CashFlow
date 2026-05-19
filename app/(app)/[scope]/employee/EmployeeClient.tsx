@@ -218,7 +218,13 @@ export function EmployeeClient({
                     </p>
                     <p className="text-label-md text-on-surface-variant">{formatDay(tx.occurred_on)}</p>
                   </div>
-                  <span className="text-body-sm font-bold text-error shrink-0">
+                  {!tx.is_confirmed && (
+                    <span className="shrink-0 text-label-md font-bold px-xs py-[2px] rounded-full"
+                      style={{ background: "var(--color-primary)20", color: "var(--color-primary)" }}>
+                      Pendiente
+                    </span>
+                  )}
+                  <span className="text-body-sm font-bold shrink-0" style={{ color: tx.is_confirmed ? "var(--color-error)" : "var(--color-on-surface-variant)" }}>
                     -{formatCurrency(Number(tx.amount))}
                   </span>
                 </div>

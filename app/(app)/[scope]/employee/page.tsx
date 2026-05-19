@@ -72,22 +72,16 @@ export default async function EmployeePage({
           .eq("period_month", currentMonth)
           .in("category_id", assignedCategoryIds)
       : Promise.resolve({ data: [], error: null }),
-    // Employee's own confirmed expenses this month in assigned categories
+    // Employee's own expenses in assigned categories — no date filter (backdated + pending always visible)
     assignedCategoryIds.length > 0
       ? admin
           .from("transactions")
           .select("*, account:accounts(name,color), category:categories(name,color,icon)")
           .eq("scope", scope)
           .eq("kind", "expense")
-          .eq("is_confirmed", true)
           .eq("created_by", user.id)
-          .gte("occurred_on", currentMonth)
-          .lt("occurred_on", (() => {
-            const d = new Date(currentMonth + "T00:00:00");
-            d.setMonth(d.getMonth() + 1);
-            return d.toLocaleDateString("en-CA");
-          })())
           .in("category_id", assignedCategoryIds)
+          .order("occurred_on", { ascending: false })
       : Promise.resolve({ data: [], error: null }),
     admin
       .from("accounts")
