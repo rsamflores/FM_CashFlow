@@ -132,13 +132,12 @@ export async function getMyExpensesForReimbursement(scope: Scope): Promise<Trans
 
   const linkedIds = (linked ?? []).map((l) => l.transaction_id);
 
-  // Get employee's own confirmed expenses in this scope not yet in a reimbursement
+  // Get employee's own expenses (confirmed or pending) in this scope not yet in a reimbursement
   let query = admin
     .from("transactions")
     .select("*, account:accounts(name,color), category:categories(name,color,icon)")
     .eq("scope", scope)
     .eq("kind", "expense")
-    .eq("is_confirmed", true)
     .eq("affects_balance", false)
     .eq("created_by", user.id)
     .order("occurred_on", { ascending: false });
