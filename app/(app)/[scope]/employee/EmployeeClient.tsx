@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { TransactionDialog } from "@/components/forms/TransactionDialog";
 import { ReimbursementRequestDialog } from "@/components/forms/ReimbursementRequestDialog";
+import { ReceiptViewer } from "@/components/ui/ReceiptViewer";
 import type { AccountRow } from "@/lib/actions/accounts";
 import type { CategoryRow } from "@/lib/actions/categories";
 import type { BudgetRow } from "@/lib/actions/budgets";
@@ -224,6 +225,7 @@ export function EmployeeClient({
                       Pendiente
                     </span>
                   )}
+                  {tx.receipt_url && <ReceiptViewer url={tx.receipt_url} compact />}
                   <span className="text-body-sm font-bold shrink-0" style={{ color: tx.is_confirmed ? "var(--color-error)" : "var(--color-on-surface-variant)" }}>
                     -{formatCurrency(Number(tx.amount))}
                   </span>

@@ -8,6 +8,7 @@ import type { TransactionRow } from "@/lib/actions/transactions";
 import type { AccountRow } from "@/lib/actions/accounts";
 import { formatCurrency, formatMonth, formatDay } from "@/lib/format";
 import type { Scope } from "@/lib/scope";
+import { ReceiptViewer } from "@/components/ui/ReceiptViewer";
 
 type Props = {
   scope: Scope;
@@ -259,8 +260,8 @@ function BudgetRow({
           ) : (
             <div className="divide-y divide-outline-variant/10">
               {sortedTxs.map((tx) => (
-                <div key={tx.id} className="flex items-center justify-between px-lg py-sm">
-                  <div className="flex items-center gap-sm min-w-0">
+                <div key={tx.id} className="flex items-center gap-sm px-lg py-sm">
+                  <div className="flex items-center gap-sm min-w-0 flex-1">
                     <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${tx.is_confirmed ? "" : "opacity-40"}`}
                       style={{ background: catColor }} />
                     <div className="min-w-0">
@@ -272,7 +273,8 @@ function BudgetRow({
                       </p>
                     </div>
                   </div>
-                  <span className={`text-body-sm font-bold shrink-0 ml-sm ${tx.is_confirmed ? "text-error" : "text-on-surface-variant"}`}>
+                  {tx.receipt_url && <ReceiptViewer url={tx.receipt_url} compact />}
+                  <span className={`text-body-sm font-bold shrink-0 ${tx.is_confirmed ? "text-error" : "text-on-surface-variant"}`}>
                     −{formatCurrency(Number(tx.amount))}
                   </span>
                 </div>

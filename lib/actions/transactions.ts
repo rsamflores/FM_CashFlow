@@ -37,6 +37,7 @@ export type TransactionRow = {
   affects_balance: boolean;
   recurring_rule_id: string | null;
   transfer_id: string | null;
+  receipt_url: string | null;
   created_at: string;
   account: { name: string; color: string | null } | null;
   category: { name: string; color: string | null; icon: string | null } | null;
@@ -252,6 +253,21 @@ export async function createTransaction(scope: Scope, formData: FormData) {
     if (incAcc) incomeAccountScope = incAcc.scope;
   }
 
+  // Upload receipt if provided
+  let receiptUrl: string | null = null;
+  const receiptFile = formData.get("receipt") as File | null;
+  if (receiptFile && receiptFile.size > 0) {
+    const ext = receiptFile.name.split(".").pop()?.toLowerCase() ?? "jpg";
+    const fileName = `${scope}/${user.id}/${crypto.randomUUID()}.${ext}`;
+    const buffer = Buffer.from(await receiptFile.arrayBuffer());
+    const { error: uploadErr } = await adminClient.storage
+      .from("receipts")
+      .upload(fileName, buffer, { contentType: receiptFile.type, upsert: false });
+    if (uploadErr) return { error: "Error al subir el comprobante: " + uploadErr.message };
+    const { data: { publicUrl } } = adminClient.storage.from("receipts").getPublicUrl(fileName);
+    receiptUrl = publicUrl;
+  }
+
   const { error } = await supabase.from("transactions").insert({
     ...parsed.data,
     amount: incomeAmount,
@@ -259,6 +275,7 @@ export async function createTransaction(scope: Scope, formData: FormData) {
     created_by: user.id,
     is_confirmed: isConfirmed,
     recurring_rule_id: recurringRuleId,
+    receipt_url: receiptUrl,
   });
 
   if (error) return { error: error.message };

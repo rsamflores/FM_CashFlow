@@ -64,6 +64,8 @@ export function TransactionDialog({
   const [isTaxExempt, setIsTaxExempt] = useState(false);
   const [isCardPayment, setIsCardPayment] = useState(false);
   const [cardPaymentTargetId, setCardPaymentTargetId] = useState(creditCardAccounts[0]?.id ?? "");
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
 
   // Reset all fields when the dialog opens (handles both new and edit)
   useEffect(() => {
@@ -82,6 +84,8 @@ export function TransactionDialog({
       setIsTaxExempt(false);
       setIsCardPayment(false);
       setCardPaymentTargetId(creditCardAccounts[0]?.id ?? "");
+      setReceiptFile(null);
+      setReceiptPreview(null);
       setError(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -155,6 +159,7 @@ export function TransactionDialog({
         formData.set("iva_account_id", ivaAccountId);
       }
     }
+    if (receiptFile) formData.set("receipt", receiptFile);
     startTransition(async () => {
       const result = editTransaction
         ? await updateTransaction(editTransaction.id, scope, formData)
@@ -624,6 +629,58 @@ export function TransactionDialog({
               <p className="text-label-md text-on-surface-variant">Ya estaba contemplado en el presupuesto</p>
             </div>
           </label>
+
+          {/* Receipt upload — required for employee expenses */}
+          {forceAffectsBalance && kind === "expense" && (
+            <div className="flex flex-col gap-xs">
+              <label className="text-label-md text-on-surface-variant">
+                Comprobante de gasto {!editTransaction && <span className="text-error">*</span>}
+              </label>
+              <label
+                className="flex flex-col items-center justify-center gap-sm rounded-xl border-2 border-dashed cursor-pointer transition-colors overflow-hidden"
+                style={{
+                  borderColor: receiptFile ? "var(--color-tertiary)" : "var(--color-outline-variant)",
+                  background: receiptFile ? "var(--color-tertiary)08" : "transparent",
+                  minHeight: receiptPreview ? undefined : 96,
+                }}
+              >
+                <input
+                  type="file"
+                  accept="image/*"
+                  required={!editTransaction}
+                  className="sr-only"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    setReceiptFile(file);
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (ev) => setReceiptPreview(ev.target?.result as string);
+                      reader.readAsDataURL(file);
+                    } else {
+                      setReceiptPreview(null);
+                    }
+                  }}
+                />
+                {receiptPreview ? (
+                  <div className="relative w-full">
+                    <img src={receiptPreview} alt="Vista previa" className="w-full max-h-48 object-contain" />
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+                      style={{ background: "rgba(0,0,0,0.5)" }}>
+                      <p className="text-body-sm font-bold text-white">Cambiar imagen</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-xs py-lg px-md text-center">
+                    <span className="material-symbols-outlined" style={{ fontSize: 28, color: "var(--color-on-surface-variant)" }}>
+                      upload_file
+                    </span>
+                    <p className="text-body-sm font-bold text-on-surface">Subir comprobante de gasto</p>
+                    <p className="text-label-md text-on-surface-variant">Toca para seleccionar una imagen</p>
+                  </div>
+                )}
+              </label>
+            </div>
+          )}
 
           {error && <p className="text-body-sm text-error">{error}</p>}
 

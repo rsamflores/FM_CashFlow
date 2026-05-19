@@ -10,6 +10,7 @@ import type { CategoryRow } from "@/lib/actions/categories";
 import type { ReimbursementMeta } from "@/lib/actions/reimbursements";
 import { formatCurrency, formatDay, formatMonth } from "@/lib/format";
 import type { Scope } from "@/lib/scope";
+import { ReceiptViewer } from "@/components/ui/ReceiptViewer";
 
 type Props = {
   scope: Scope;
@@ -441,7 +442,7 @@ function TransactionRow({
     <div className="border-t border-outline-variant/10 hover:bg-surface-container transition-colors">
       {/* Desktop row */}
       <div className="hidden md:grid px-lg py-sm items-center" style={{ gridTemplateColumns: "1fr 200px 130px 100px 72px" }}>
-        <div className="flex items-center gap-sm min-w-0">{iconEl}{descEl}{badgeEl}</div>
+        <div className="flex items-center gap-sm min-w-0">{iconEl}{descEl}{badgeEl}{tx.receipt_url && <ReceiptViewer url={tx.receipt_url} compact />}</div>
         <div className="flex items-center gap-xs">
           <div className="w-2 h-2 rounded-full shrink-0" style={{ background: tx.account?.color ?? "var(--color-outline)" }} />
           <span className="text-body-sm text-on-surface-variant truncate">{tx.account?.name ?? "—"}</span>
@@ -480,7 +481,10 @@ function TransactionRow({
           <span className="text-body-sm font-bold" style={{ color: accent }}>
             {isTransfer ? "" : (isIncome ? "+" : "-")}{formatCurrency(tx.amount)}
           </span>
-          <div className="flex gap-xs">{actionsEl}</div>
+          <div className="flex gap-xs items-center">
+            {tx.receipt_url && <ReceiptViewer url={tx.receipt_url} compact />}
+            {actionsEl}
+          </div>
         </div>
       </div>
 
@@ -567,6 +571,7 @@ function PendingRow({
       <div className="hidden md:flex items-center gap-md px-lg py-sm">
         {iconEl}
         {textEl}
+        {tx.receipt_url && <ReceiptViewer url={tx.receipt_url} compact />}
         {amountEl}
         <button
           type="button"
@@ -591,7 +596,8 @@ function PendingRow({
         {textEl}
         <div className="flex flex-col items-end gap-xs shrink-0">
           {amountEl}
-          <div className="flex gap-xs">
+          <div className="flex gap-xs items-center">
+            {tx.receipt_url && <ReceiptViewer url={tx.receipt_url} compact />}
             <button
               type="button"
               onClick={onConfirm}
