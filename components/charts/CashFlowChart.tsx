@@ -227,7 +227,7 @@ export function CashFlowChart({ projections }: Props) {
 
       {/* Footer note */}
       <p className="px-lg pb-md text-label-md text-on-surface-variant">
-        Basado en reglas recurrentes activas y presupuestos mensuales replicados a cada cierre de mes. Los valores son estimados.
+        Incluye transacciones pendientes, reglas recurrentes activas y presupuestos mensuales replicados a cada cierre de mes. Los valores son estimados.
       </p>
     </div>
   );
