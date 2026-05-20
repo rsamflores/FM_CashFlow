@@ -55,3 +55,66 @@ export async function deleteRecurringRule(id: string, scope: Scope) {
   revalidatePath(`/${scope}/recurring`);
   return { success: true };
 }
+
+// ── Duplicate detection ────────────────────────────────────────────────────────
+
+export type DuplicateGroup = {
+  key: string;            // "income|224.00|biweekly"
+  kind: "income" | "expense";
+  amount: number;
+  frequency: string;
+  confidence: "high" | "medium"; // high = same next_run date
+  rules: RecurringRuleRow[];
+};
+
+export async function getDuplicateCandidates(scope: Scope): Promise<DuplicateGroup[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("recurring_rules")
+    .select("*, account:accounts!account_id(name,color), to_account:accounts!to_account_id(name,color), category:categories(name,color,icon)")
+    .eq("scope", scope)
+    .eq("is_active", true)
+    .order("next_run", { ascending: true });
+
+  if (error) throw error;
+  const rules = (data ?? []) as RecurringRuleRow[];
+
+  // Group by (kind, amount_rounded_to_cents, frequency)
+  const byKey = new Map<string, RecurringRuleRow[]>();
+  for (const rule of rules) {
+    // Skip internal transfers (both legs cancel out — not true duplicates)
+    if (rule.to_account_id) continue;
+    const key = `${rule.kind}|${Number(rule.amount).toFixed(2)}|${rule.frequency}`;
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key)!.push(rule);
+  }
+
+  const groups: DuplicateGroup[] = [];
+  for (const [key, groupRules] of byKey.entries()) {
+    if (groupRules.length < 2) continue;
+
+    // High confidence: 2+ rules that also share the same next_run date
+    const byDate = new Map<string, RecurringRuleRow[]>();
+    for (const r of groupRules) {
+      if (!byDate.has(r.next_run)) byDate.set(r.next_run, []);
+      byDate.get(r.next_run)!.push(r);
+    }
+    const hasExactDateCollision = [...byDate.values()].some((g) => g.length >= 2);
+
+    const [kind, amountStr, frequency] = key.split("|");
+    groups.push({
+      key,
+      kind: kind as "income" | "expense",
+      amount: parseFloat(amountStr),
+      frequency,
+      confidence: hasExactDateCollision ? "high" : "medium",
+      rules: groupRules,
+    });
+  }
+
+  // Sort high-confidence first, then by amount desc
+  return groups.sort((a, b) => {
+    if (a.confidence !== b.confidence) return a.confidence === "high" ? -1 : 1;
+    return b.amount - a.amount;
+  });
+}

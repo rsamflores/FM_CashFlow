@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import { Topbar } from "@/components/shell/Topbar";
 import { isValidScope, SCOPE_LABEL } from "@/lib/scope";
-import { getRecurringRules } from "@/lib/actions/recurring";
+import { getRecurringRules, getDuplicateCandidates } from "@/lib/actions/recurring";
 import { RecurringClient } from "./RecurringClient";
+import { DuplicatesAlert } from "./DuplicatesAlert";
 
 export default async function RecurringPage({
   params,
@@ -12,7 +13,10 @@ export default async function RecurringPage({
   const { scope } = await params;
   if (!isValidScope(scope)) notFound();
 
-  const rules = await getRecurringRules(scope);
+  const [rules, duplicates] = await Promise.all([
+    getRecurringRules(scope),
+    getDuplicateCandidates(scope),
+  ]);
 
   const incomes   = rules.filter((r) => r.kind === "income");
   const transfers = rules.filter((r) => r.kind === "expense" && !!r.to_account_id);
@@ -31,6 +35,7 @@ export default async function RecurringPage({
             : `Automatiza sueldos, alquileres y suscripciones · ${SCOPE_LABEL[scope]}`}
         </p>
       </header>
+      <DuplicatesAlert scope={scope} groups={duplicates} />
       <RecurringClient
         scope={scope}
         incomes={incomes}
