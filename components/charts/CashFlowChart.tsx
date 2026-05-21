@@ -11,19 +11,19 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import type { CashFlowProjection, CashFlowPoint } from "@/lib/actions/cashflow";
+import type { MonthlyCashFlowProjection } from "@/lib/actions/cashflow";
 import { formatCurrency } from "@/lib/format";
 
-type Days = 30 | 60 | 90;
-
 type Props = {
-  projections: Record<Days, CashFlowProjection>;
+  projection: MonthlyCashFlowProjection;
 };
 
+type ChartPoint = { label: string; balance: number; events: string[] };
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function CustomTooltip({ active, payload, label }: any) {
+function CustomTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
-  const point: CashFlowPoint = payload[0]?.payload;
+  const point: ChartPoint = payload[0]?.payload;
   const balance: number = payload[0]?.value;
   const isNegative = balance < 0;
 
@@ -38,7 +38,7 @@ function CustomTooltip({ active, payload, label }: any) {
       }}
     >
       <p className="font-bold mb-xs" style={{ color: isNegative ? "var(--color-error)" : "var(--color-secondary-fixed)" }}>
-        {label} — {formatCurrency(balance)}
+        {point?.label} — {formatCurrency(balance)}
       </p>
       {point?.events?.length > 0 && (
         <ul className="flex flex-col gap-xs mt-xs">
@@ -53,10 +53,20 @@ function CustomTooltip({ active, payload, label }: any) {
   );
 }
 
-export function CashFlowChart({ projections }: Props) {
-  const [days, setDays] = useState<Days>(30);
-  const projection = projections[days];
-  const { series, currentBalance, minBalance, minDate, dangerDays, budgetsRolledFromMonth } = projection;
+function capitalize(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function shortMonthName(label: string) {
+  // "junio 2026" → "Junio"
+  return capitalize(label.split(" ")[0]);
+}
+
+export function CashFlowChart({ projection }: Props) {
+  const { today, months, dangerMonths, minBalance, budgetsRolledFromMonth } = projection;
+
+  // Default: show all 3 months
+  const [selectedIdx, setSelectedIdx] = useState(2);
 
   const rolledFromLabel = budgetsRolledFromMonth
     ? new Date(budgetsRolledFromMonth + "T12:00:00").toLocaleDateString("es-SV", {
@@ -65,17 +75,22 @@ export function CashFlowChart({ projections }: Props) {
       })
     : null;
 
-  const hasNegative = dangerDays > 0;
-  const minBalanceNegative = minBalance < 0;
-
-  // Color the area based on whether we ever go negative
+  const hasNegative = dangerMonths > 0;
   const areaColor = hasNegative ? "var(--color-error)" : "var(--color-primary)";
-  const gradientId = `cashflow-grad-${days}`;
+  const gradientId = "cashflow-monthly-grad";
 
-  // Format minDate for display
-  const minDateLabel = minDate
-    ? new Date(minDate + "T12:00:00").toLocaleDateString("es-SV", { day: "numeric", month: "short" })
-    : null;
+  // Series: "Hoy" anchor + projected months up to selected tab
+  const series: ChartPoint[] = [
+    { label: "Hoy", balance: today.balance, events: [] },
+    ...months.slice(0, selectedIdx + 1).map((m) => ({
+      label: shortMonthName(m.label),
+      balance: m.closingBalance,
+      events: m.events,
+    })),
+  ];
+
+  const selectedMonth = months[selectedIdx];
+  const minBalanceNegative = minBalance < 0;
 
   return (
     <div className="bg-surface-container-low rounded-2xl border border-outline-variant/10 overflow-hidden">
@@ -91,16 +106,16 @@ export function CashFlowChart({ projections }: Props) {
           Proyección de caja
         </h3>
 
-        {/* Day tabs */}
+        {/* Month tabs */}
         <div className="flex gap-xs bg-surface-container-high rounded-full p-xs">
-          {([30, 60, 90] as Days[]).map((d) => (
+          {months.map((m, idx) => (
             <button
-              key={d}
+              key={m.month}
               type="button"
-              onClick={() => setDays(d)}
+              onClick={() => setSelectedIdx(idx)}
               className="h-7 px-sm rounded-full text-label-md font-bold transition-colors"
               style={
-                days === d
+                selectedIdx === idx
                   ? {
                       background: "var(--color-primary-container)",
                       color: "var(--color-on-primary-container)",
@@ -108,7 +123,7 @@ export function CashFlowChart({ projections }: Props) {
                   : { color: "var(--color-on-surface-variant)" }
               }
             >
-              {d} días
+              {shortMonthName(m.label)}
             </button>
           ))}
         </div>
@@ -118,29 +133,30 @@ export function CashFlowChart({ projections }: Props) {
       <div className="grid grid-cols-3 divide-x divide-outline-variant/10 border-b border-outline-variant/10">
         <div className="px-md py-sm">
           <p className="text-label-md text-on-surface-variant">Saldo actual</p>
-          <p className="text-body-sm font-bold text-on-surface">{formatCurrency(currentBalance)}</p>
+          <p className="text-body-sm font-bold text-on-surface">{formatCurrency(today.balance)}</p>
         </div>
         <div className="px-md py-sm">
-          <p className="text-label-md text-on-surface-variant">Saldo mín. proyectado</p>
+          <p className="text-label-md text-on-surface-variant">
+            Cierre {shortMonthName(selectedMonth?.label ?? "")}
+          </p>
           <p
             className="text-body-sm font-bold"
-            style={{ color: minBalanceNegative ? "var(--color-error)" : "var(--color-secondary-fixed)" }}
+            style={{
+              color: selectedMonth?.closingBalance < 0
+                ? "var(--color-error)"
+                : "var(--color-secondary-fixed)",
+            }}
           >
-            {formatCurrency(minBalance)}
-            {minDateLabel && (
-              <span className="text-label-md font-normal text-on-surface-variant ml-xs">
-                el {minDateLabel}
-              </span>
-            )}
+            {formatCurrency(selectedMonth?.closingBalance ?? 0)}
           </p>
         </div>
         <div className="px-md py-sm">
-          <p className="text-label-md text-on-surface-variant">Días en riesgo</p>
+          <p className="text-label-md text-on-surface-variant">Meses en riesgo</p>
           <p
             className="text-body-sm font-bold"
-            style={{ color: dangerDays > 0 ? "var(--color-error)" : "var(--color-secondary-fixed)" }}
+            style={{ color: dangerMonths > 0 ? "var(--color-error)" : "var(--color-secondary-fixed)" }}
           >
-            {dangerDays === 0 ? "Ninguno" : `${dangerDays} día${dangerDays !== 1 ? "s" : ""}`}
+            {dangerMonths === 0 ? "Ninguno" : `${dangerMonths} mes${dangerMonths !== 1 ? "es" : ""}`}
           </p>
         </div>
       </div>
@@ -153,13 +169,13 @@ export function CashFlowChart({ projections }: Props) {
         >
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>warning</span>
           <span>
-            El saldo proyectado cae bajo $0 durante {dangerDays} día{dangerDays !== 1 ? "s" : ""}.
-            {minDateLabel && ` El punto más bajo es el ${minDateLabel} con ${formatCurrency(minBalance)}.`}
+            El saldo proyectado cae bajo $0 en {dangerMonths} mes{dangerMonths !== 1 ? "es" : ""}.
+            {minBalanceNegative && ` Saldo mínimo proyectado: ${formatCurrency(minBalance)}.`}
           </span>
         </div>
       )}
 
-      {/* Rolled-budgets banner (defense-in-depth — debería rara vez aparecer) */}
+      {/* Rolled-budgets banner */}
       {rolledFromLabel && (
         <div
           className="flex items-center gap-sm px-lg py-sm text-body-sm border-b border-outline-variant/10"
@@ -193,7 +209,6 @@ export function CashFlowChart({ projections }: Props) {
               tick={{ fill: "var(--color-on-surface-variant)", fontSize: 11 }}
               axisLine={false}
               tickLine={false}
-              interval="preserveStartEnd"
             />
             <YAxis
               tick={{ fill: "var(--color-on-surface-variant)", fontSize: 11 }}
@@ -205,7 +220,6 @@ export function CashFlowChart({ projections }: Props) {
               width={52}
             />
             <Tooltip content={<CustomTooltip />} />
-            {/* Zero line */}
             <ReferenceLine
               y={0}
               stroke="var(--color-error)"
@@ -218,8 +232,8 @@ export function CashFlowChart({ projections }: Props) {
               stroke={areaColor}
               strokeWidth={2}
               fill={`url(#${gradientId})`}
-              dot={false}
-              activeDot={{ r: 4, fill: areaColor, strokeWidth: 0 }}
+              dot={{ r: 4, fill: areaColor, strokeWidth: 0 }}
+              activeDot={{ r: 5, fill: areaColor, strokeWidth: 0 }}
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -227,7 +241,7 @@ export function CashFlowChart({ projections }: Props) {
 
       {/* Footer note */}
       <p className="px-lg pb-md text-label-md text-on-surface-variant">
-        Incluye transacciones pendientes, reglas recurrentes activas y presupuestos mensuales replicados a cada cierre de mes. Los valores son estimados.
+        Proyección mensual: saldo actual + ingresos recurrentes − presupuestos y egresos sin presupuestar. Valores estimados.
       </p>
     </div>
   );

@@ -7,7 +7,7 @@ import { formatMonth, svToday } from "@/lib/format";
 import { getAccounts, getPersonalCashAccounts } from "@/lib/actions/accounts";
 import { getTransactionsFrom } from "@/lib/actions/transactions";
 import { getBudgets } from "@/lib/actions/budgets";
-import { getCashFlowProjection } from "@/lib/actions/cashflow";
+import { getMonthlyCashFlowProjection } from "@/lib/actions/cashflow";
 import { DashboardClient } from "./DashboardClient";
 
 export default async function DashboardPage({
@@ -26,14 +26,12 @@ export default async function DashboardPage({
   const sixMonthsAgo = new Date(year, month - 5, 1);
   const fromStr = `${sixMonthsAgo.getFullYear()}-${String(sixMonthsAgo.getMonth() + 1).padStart(2, "0")}-01`;
 
-  const [accounts, transactions, budgets, personalCashAccounts, cf30, cf60, cf90] = await Promise.all([
+  const [accounts, transactions, budgets, personalCashAccounts, cashFlowProjection] = await Promise.all([
     getAccounts(scope),
     getTransactionsFrom(scope, fromStr),
     getBudgets(scope, currentMonthStr),
     scope === "business" ? getPersonalCashAccounts() : Promise.resolve([]),
-    getCashFlowProjection(scope, 30),
-    getCashFlowProjection(scope, 60),
-    getCashFlowProjection(scope, 90),
+    getMonthlyCashFlowProjection(scope),
   ]);
 
   const confirmed = transactions.filter((tx) => tx.is_confirmed && !tx.transfer_id);
@@ -317,7 +315,7 @@ export default async function DashboardPage({
         projectedTotal={projectedTotal}
         projectedRemainder={projectedRemainder}
         accountProjections={accountProjections}
-        cashFlowProjections={{ 30: cf30, 60: cf60, 90: cf90 }}
+        cashFlowProjection={cashFlowProjection}
       />
     </>
   );
