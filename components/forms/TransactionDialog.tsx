@@ -132,6 +132,9 @@ export function TransactionDialog({
       const card = creditCardAccounts.find((c) => c.id === cardPaymentTargetId);
       fd.set("description", description || `Pago ${card?.name ?? "tarjeta"}`);
       fd.set("is_recurring", "false");
+      // Un pago de tarjeta refleja dinero que ya se movió: confirmar de inmediato
+      // cuando la fecha es hoy o anterior (no para pagos programados a futuro).
+      if (occurredOn <= today) fd.set("force_confirmed", "true");
       startTransition(async () => {
         const result = await createTransfer(fd);
         if (result?.error) { setError(result.error); return; }

@@ -672,7 +672,10 @@ export async function createTransfer(formData: FormData) {
   const toAcc = accounts.find((a) => a.id === toAccountId)!;
   const transferId = crypto.randomUUID();
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/El_Salvador" });
-  const isConfirmed = occurredOn === today;
+  // force_confirmed: usado por pagos de tarjeta (dinero que ya se movió). Solo
+  // confirma si la fecha no es futura, para no aplicar pagos programados.
+  const forceConfirmed = formData.get("force_confirmed") === "true";
+  const isConfirmed = occurredOn === today || (forceConfirmed && occurredOn <= today);
 
   // Recurring transfer rule
   const isRecurring = formData.get("is_recurring") === "true";
