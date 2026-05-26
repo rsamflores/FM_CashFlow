@@ -473,99 +473,10 @@ export async function confirmTransaction(id: string, scope: Scope) {
     }
   }
 
-  // Auto-confirm the IVA transfer linked to this business income
-  if (tx.kind === "income" && tx.scope === "business") {
-    const { data: ivaExpense } = await supabase
-      .from("transactions")
-      .select("*, recurring_rule:recurring_rules(*)")
-      .eq("account_id", tx.account_id)
-      .eq("occurred_on", tx.occurred_on)
-      .eq("kind", "expense")
-      .is("category_id", null)
-      .not("transfer_id", "is", null)
-      .eq("is_confirmed", false)
-      .limit(1)
-      .maybeSingle();
-
-    if (ivaExpense?.transfer_id) {
-      // If the income was saved as net (old records), update it to gross (net + IVA)
-      // so the account correctly receives the full amount before IVA is transferred out.
-      // Detection: net/IVA ≈ 6.92, gross/IVA ≈ 7.92 — threshold 7.5 reliably separates them.
-      const ivaAmt = Number(ivaExpense.amount);
-      const incomeAmt = Number(tx.amount);
-      if (ivaAmt > 0 && incomeAmt / ivaAmt < 7.5) {
-        await supabase
-          .from("transactions")
-          .update({ amount: Math.round((incomeAmt + ivaAmt) * 100) / 100 })
-          .eq("id", id);
-      }
-
-      await supabase
-        .from("transactions")
-        .update({ is_confirmed: true })
-        .eq("transfer_id", ivaExpense.transfer_id);
-
-      const ivaRule = ivaExpense.recurring_rule as {
-        id: string; frequency: string; next_run: string;
-        account_id: string; category_id: string | null; kind: string;
-        amount: number; description: string | null; is_active: boolean;
-        to_account_id: string | null;
-      } | null;
-
-      if (ivaRule?.is_active) {
-        const { data: ivaLegs } = await supabase
-          .from("transactions")
-          .select("id, kind, account_id, scope")
-          .eq("transfer_id", ivaExpense.transfer_id);
-
-        const ivaFrom = ivaLegs?.find((l: { kind: string }) => l.kind === "expense");
-        const ivaTo   = ivaLegs?.find((l: { kind: string }) => l.kind === "income");
-
-        if (ivaFrom && ivaTo) {
-          const nextTransferId = crypto.randomUUID();
-          const nextDate = nextRunDate(ivaRule.next_run, ivaRule.frequency);
-
-          await supabase.from("transactions").insert([
-            {
-              scope: ivaFrom.scope,
-              account_id: ivaFrom.account_id,
-              category_id: null,
-              kind: "expense",
-              amount: ivaRule.amount,
-              occurred_on: ivaRule.next_run,
-              description: ivaRule.description,
-              is_planned: false,
-              is_confirmed: false,
-              affects_balance: true,
-              transfer_id: nextTransferId,
-              recurring_rule_id: ivaRule.id,
-              created_by: tx.created_by,
-            },
-            {
-              scope: ivaTo.scope,
-              account_id: ivaTo.account_id,
-              category_id: null,
-              kind: "income",
-              amount: ivaRule.amount,
-              occurred_on: ivaRule.next_run,
-              description: ivaRule.description,
-              is_planned: false,
-              is_confirmed: false,
-              affects_balance: true,
-              transfer_id: nextTransferId,
-              recurring_rule_id: ivaRule.id,
-              created_by: tx.created_by,
-            },
-          ]);
-
-          await supabase
-            .from("recurring_rules")
-            .update({ next_run: nextDate })
-            .eq("id", ivaRule.id);
-        }
-      }
-    }
-  }
+  // NOTE: La transferencia de IVA vinculada a un ingreso empresarial NO se
+  // auto-confirma. El ingreso entra por su monto bruto (neto + IVA) y la
+  // transferencia de IVA queda pendiente hasta que el usuario la confirme
+  // manualmente al declarar/mover el IVA.
 
   // Notify the transaction creator if someone else confirmed it
   const createdBy = (tx as unknown as { created_by?: string }).created_by;
@@ -833,143 +744,61 @@ export async function createTransfer(formData: FormData) {
 }
 
 /**
- * One-time retroactive action: generates IVA transfers for all existing
- * business income transactions that don't already have one.
- * Idempotent — safe to run multiple times.
+ * Limpieza del IVA automático previo:
+ *  - Borra las reglas recurrentes de IVA (`description` empieza con "IVA —"),
+ *    desvinculando primero las transacciones que las referencian.
+ *  - Revierte a pendiente las transferencias de IVA que se auto-confirmaron,
+ *    para que las cuentas reflejen el bruto y el IVA salga solo al confirmar
+ *    manualmente.
+ * Idempotente — seguro de correr varias veces.
  */
-export async function generateRetroactiveIvaTransfers() {
+export async function cleanupAutomaticIva() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado" };
 
-  // Find the tax account
-  const { data: taxAccount } = await supabase
-    .from("accounts")
-    .select("id, scope")
-    .eq("is_tax_account", true)
-    .limit(1)
-    .single();
+  // ── 1. Reglas recurrentes de IVA ────────────────────────────────────────────
+  const { data: ivaRules, error: rulesErr } = await supabase
+    .from("recurring_rules")
+    .select("id")
+    .like("description", "IVA —%");
+  if (rulesErr) return { error: rulesErr.message };
 
-  if (!taxAccount) {
-    return { error: "No hay ninguna cuenta marcada como 'Cuenta de impuestos'. Márcala primero en Cuentas." };
-  }
+  const ivaRuleIds = (ivaRules ?? []).map((r: { id: string }) => r.id);
+  let rulesDeleted = 0;
 
-  // Fetch all confirmed and pending business income (non-transfer)
-  const { data: incomes, error: incErr } = await supabase
-    .from("transactions")
-    .select("id, account_id, amount, occurred_on, description, is_confirmed, recurring_rule_id, category:categories(name), recurring_rule:recurring_rules(frequency, next_run)")
-    .eq("scope", "business")
-    .eq("kind", "income")
-    .is("transfer_id", null);
+  if (ivaRuleIds.length > 0) {
+    // Desvincular transacciones que apuntan a estas reglas (evita romper el FK)
+    await supabase
+      .from("transactions")
+      .update({ recurring_rule_id: null })
+      .in("recurring_rule_id", ivaRuleIds);
 
-  if (incErr || !incomes) return { error: incErr?.message ?? "Error al obtener ingresos" };
-
-  // Fetch all existing IVA transfers to avoid duplicates
-  // An IVA transfer expense is identified by: kind=expense, category_id=null, transfer_id IS NOT NULL
-  const { data: existingIvaExpenses } = await supabase
-    .from("transactions")
-    .select("account_id, occurred_on")
-    .eq("kind", "expense")
-    .is("category_id", null)
-    .not("transfer_id", "is", null);
-
-  // Build a set of "account_id|occurred_on" keys for fast lookup
-  const existingIvaKeys = new Set(
-    (existingIvaExpenses ?? []).map((t: { account_id: string; occurred_on: string }) => `${t.account_id}|${t.occurred_on}`)
-  );
-
-  // Build set of account_ids needed for scope lookup
-  const accountIds = [...new Set(incomes.map((i: { account_id: string }) => i.account_id))];
-  const { data: accountsData } = await supabase
-    .from("accounts")
-    .select("id, scope")
-    .in("id", accountIds);
-
-  const accountScopeMap: Record<string, string> = {};
-  for (const a of accountsData ?? []) accountScopeMap[a.id] = a.scope;
-
-  let created = 0;
-
-  for (const income of incomes) {
-    // Skip if an IVA transfer already exists for this income (prevent duplicates)
-    if (existingIvaKeys.has(`${income.account_id}|${income.occurred_on}`)) continue;
-
-    const net = Number(income.amount);
-    const ivaAmount = Math.round(net * 1.11112 * 0.13 * 100) / 100;
-    const transferId = crypto.randomUUID();
-    const fromScope = accountScopeMap[income.account_id] ?? "business";
-
-    const catRaw = income.category;
-    const cat = (Array.isArray(catRaw) ? catRaw[0] : catRaw) as { name: string } | null;
-    const label = income.description || cat?.name || "Ingreso";
-    const ivaDesc = `IVA — ${label}`;
-
-    // Create recurring rule for this IVA transfer (monthly on same day as income)
-    const ruleRaw = income.recurring_rule;
-    const rule = (Array.isArray(ruleRaw) ? ruleRaw[0] : ruleRaw) as { frequency: string; next_run: string } | null;
-    const frequency = rule?.frequency ?? "monthly";
-    const nextRun = nextRunDate(income.occurred_on, frequency);
-
-    const { data: newRule } = await supabase
+    const { error: delErr } = await supabase
       .from("recurring_rules")
-      .insert({
-        scope: "business",
-        account_id: income.account_id,
-        to_account_id: taxAccount.id,
-        kind: "expense",
-        amount: ivaAmount,
-        description: ivaDesc,
-        frequency,
-        start_date: income.occurred_on,
-        next_run: nextRun,
-        is_active: true,
-      })
-      .select("id")
-      .single();
-
-    const recurringRuleId = newRule?.id ?? null;
-
-    const { error: insertErr } = await supabase.from("transactions").insert([
-      {
-        scope: fromScope,
-        account_id: income.account_id,
-        category_id: null,
-        kind: "expense",
-        amount: ivaAmount,
-        occurred_on: income.occurred_on,
-        description: ivaDesc,
-        is_planned: false,
-        is_confirmed: false,
-        affects_balance: true,
-        transfer_id: transferId,
-        recurring_rule_id: recurringRuleId,
-        created_by: user.id,
-      },
-      {
-        scope: taxAccount.scope,
-        account_id: taxAccount.id,
-        category_id: null,
-        kind: "income",
-        amount: ivaAmount,
-        occurred_on: income.occurred_on,
-        description: ivaDesc,
-        is_planned: false,
-        is_confirmed: false,
-        affects_balance: true,
-        transfer_id: transferId,
-        recurring_rule_id: recurringRuleId,
-        created_by: user.id,
-      },
-    ]);
-
-    if (!insertErr) created++;
+      .delete()
+      .in("id", ivaRuleIds);
+    if (delErr) return { error: delErr.message };
+    rulesDeleted = ivaRuleIds.length;
   }
+
+  // ── 2. Transferencias de IVA auto-confirmadas → pendientes ──────────────────
+  const { data: reverted, error: revErr } = await supabase
+    .from("transactions")
+    .update({ is_confirmed: false })
+    .like("description", "IVA —%")
+    .not("transfer_id", "is", null)
+    .eq("is_confirmed", true)
+    .select("id");
+  if (revErr) return { error: revErr.message };
+  const transfersReverted = (reverted ?? []).length;
 
   revalidatePath("/business/transactions");
   revalidatePath("/business/accounts");
   revalidatePath("/business/dashboard");
+  revalidatePath("/business/recurring");
   revalidatePath("/personal/accounts");
   revalidatePath("/personal/dashboard");
 
-  return { success: true, created };
+  return { success: true, rulesDeleted, transfersReverted };
 }

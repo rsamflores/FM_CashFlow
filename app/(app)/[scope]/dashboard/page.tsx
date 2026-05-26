@@ -117,20 +117,9 @@ export default async function DashboardPage({
     pendingTransferOutByAccount[tx.account_id] = (pendingTransferOutByAccount[tx.account_id] ?? 0) + amt;
   }
 
-  // Incomes are stored as NET; IVA transfer-out amounts represent the portion the client
-  // actually pays into the account before the IVA is moved to the tax account.
-  // Add each pending IVA transfer-out amount back to the source account's income so the
-  // projection shows the gross receipt (net + IVA in, then IVA out = net remaining).
-  for (const tx of pending.filter((t) =>
-    t.kind === "expense" &&
-    !!t.transfer_id &&
-    t.description?.startsWith("IVA —") &&
-    t.occurred_on >= currentMonthStr &&
-    t.occurred_on < nextMonthStr
-  )) {
-    const amt = Number(tx.amount);
-    pendingIncomeByAccount[tx.account_id] = (pendingIncomeByAccount[tx.account_id] ?? 0) + amt;
-  }
+  // Los ingresos se guardan en BRUTO (neto + IVA), así que el income pendiente ya
+  // incluye el IVA. La transferencia de IVA pendiente (pendingTransferOutByAccount)
+  // modela la salida futura del IVA cuando el usuario la confirme manualmente.
 
   const totalPendingIncome = Object.values(pendingIncomeByAccount).reduce((s, v) => s + v, 0);
 

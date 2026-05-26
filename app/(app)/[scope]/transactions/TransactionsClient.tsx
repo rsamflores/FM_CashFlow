@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { TransactionDialog } from "@/components/forms/TransactionDialog";
 import { TransferDialog } from "@/components/forms/TransferDialog";
-import { deleteTransaction, confirmTransaction, generateRetroactiveIvaTransfers, type TransactionRow } from "@/lib/actions/transactions";
+import { deleteTransaction, confirmTransaction, cleanupAutomaticIva, type TransactionRow } from "@/lib/actions/transactions";
 import type { AccountRow } from "@/lib/actions/accounts";
 import type { CategoryRow } from "@/lib/actions/categories";
 import type { ReimbursementMeta } from "@/lib/actions/reimbursements";
@@ -36,8 +36,8 @@ export function TransactionsClient({ scope, transactions, accounts, categories, 
   const [editTransfer, setEditTransfer] = useState<TransactionRow | undefined>();
   const [editTransferTo, setEditTransferTo] = useState<TransactionRow | undefined>();
   const [defaultKind, setDefaultKind] = useState<"income" | "expense">("expense");
-  const [retroIvaLoading, setRetroIvaLoading] = useState(false);
-  const [retroIvaResult, setRetroIvaResult] = useState<{ created?: number; error?: string } | null>(null);
+  const [ivaCleanupLoading, setIvaCleanupLoading] = useState(false);
+  const [ivaCleanupResult, setIvaCleanupResult] = useState<{ rulesDeleted?: number; transfersReverted?: number; error?: string } | null>(null);
 
   function openCreate(kind: "income" | "expense" = "expense") {
     setEditTx(undefined);
@@ -192,48 +192,48 @@ export function TransactionsClient({ scope, transactions, accounts, categories, 
         </button>
       </div>
 
-      {/* Retroactive IVA banner — business scope only, shown until dismissed */}
-      {scope === "business" && retroIvaResult === null && (
+      {/* IVA cleanup banner — business scope only, shown until dismissed */}
+      {scope === "business" && ivaCleanupResult === null && (
         <div className="mb-lg rounded-2xl border p-md flex items-center gap-md"
           style={{ borderColor: "var(--color-tertiary-container)", background: "var(--color-tertiary-container)12" }}>
-          <span className="material-symbols-outlined shrink-0" style={{ fontSize: 22, color: "var(--color-tertiary-fixed)" }}>receipt_long</span>
+          <span className="material-symbols-outlined shrink-0" style={{ fontSize: 22, color: "var(--color-tertiary-fixed)" }}>mop</span>
           <div className="flex-1 min-w-0">
-            <p className="text-body-sm font-bold" style={{ color: "var(--color-tertiary-fixed)" }}>Generar IVA retroactivo</p>
-            <p className="text-label-md text-on-surface-variant">Crea las transferencias de IVA pendientes para los ingresos existentes</p>
+            <p className="text-body-sm font-bold" style={{ color: "var(--color-tertiary-fixed)" }}>Limpiar IVA automático</p>
+            <p className="text-label-md text-on-surface-variant">Borra las reglas recurrentes de IVA y revierte a pendiente las transferencias de IVA que se confirmaron solas</p>
           </div>
           <button
             type="button"
-            disabled={retroIvaLoading}
+            disabled={ivaCleanupLoading}
             onClick={async () => {
-              setRetroIvaLoading(true);
-              const res = await generateRetroactiveIvaTransfers();
-              setRetroIvaResult(res as { created?: number; error?: string });
-              setRetroIvaLoading(false);
+              setIvaCleanupLoading(true);
+              const res = await cleanupAutomaticIva();
+              setIvaCleanupResult(res as { rulesDeleted?: number; transfersReverted?: number; error?: string });
+              setIvaCleanupLoading(false);
             }}
             className="shrink-0 h-9 px-md rounded-full text-body-sm font-bold transition-opacity disabled:opacity-50"
             style={{ background: "var(--color-tertiary-container)", color: "var(--color-on-tertiary-container)" }}
           >
-            {retroIvaLoading ? "Procesando…" : "Ejecutar"}
+            {ivaCleanupLoading ? "Procesando…" : "Ejecutar"}
           </button>
-          <button type="button" onClick={() => setRetroIvaResult({ created: 0 })} className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant">
+          <button type="button" onClick={() => setIvaCleanupResult({ rulesDeleted: 0, transfersReverted: 0 })} className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant">
             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
           </button>
         </div>
       )}
 
-      {retroIvaResult && (
+      {ivaCleanupResult && (ivaCleanupResult.error || (ivaCleanupResult.rulesDeleted ?? 0) + (ivaCleanupResult.transfersReverted ?? 0) > 0) && (
         <div className="mb-lg rounded-2xl border p-md flex items-center gap-md"
           style={{
-            borderColor: retroIvaResult.error ? "var(--color-error)" : "var(--color-secondary-container)",
-            background: retroIvaResult.error ? "var(--color-error-container)20" : "var(--color-secondary-container)20",
+            borderColor: ivaCleanupResult.error ? "var(--color-error)" : "var(--color-secondary-container)",
+            background: ivaCleanupResult.error ? "var(--color-error-container)20" : "var(--color-secondary-container)20",
           }}>
-          <span className="material-symbols-outlined shrink-0" style={{ fontSize: 20, color: retroIvaResult.error ? "var(--color-error)" : "var(--color-secondary-fixed)" }}>
-            {retroIvaResult.error ? "error" : "check_circle"}
+          <span className="material-symbols-outlined shrink-0" style={{ fontSize: 20, color: ivaCleanupResult.error ? "var(--color-error)" : "var(--color-secondary-fixed)" }}>
+            {ivaCleanupResult.error ? "error" : "check_circle"}
           </span>
-          <p className="text-body-sm flex-1" style={{ color: retroIvaResult.error ? "var(--color-error)" : "var(--color-secondary-fixed)" }}>
-            {retroIvaResult.error ?? `${retroIvaResult.created} transferencias de IVA generadas correctamente`}
+          <p className="text-body-sm flex-1" style={{ color: ivaCleanupResult.error ? "var(--color-error)" : "var(--color-secondary-fixed)" }}>
+            {ivaCleanupResult.error ?? `${ivaCleanupResult.rulesDeleted} regla(s) de IVA borrada(s) · ${ivaCleanupResult.transfersReverted} transferencia(s) revertida(s) a pendiente`}
           </p>
-          <button type="button" onClick={() => setRetroIvaResult(null)} className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant">
+          <button type="button" onClick={() => setIvaCleanupResult(null)} className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant">
             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
           </button>
         </div>
