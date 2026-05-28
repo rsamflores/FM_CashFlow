@@ -224,11 +224,29 @@ async function fetchWalmartByUrl(url: URL): Promise<ProductHit | { error: string
   }
 }
 
-/** PriceSmart: /es-sv/p/[pid]  → Bloomreach (name+image) + CT (price) */
+/**
+ * PriceSmart product URL lookup.
+ * Supports both known formats:
+ *   /es-sv/p/500869
+ *   /es-sv/producto/nedecaza-cafe-tostado-y-molido-2-kg-500869/500869
+ * Strategy: try /p/[pid] pattern first, then fall back to last all-digit path segment.
+ */
 async function fetchPricesmartByUrl(url: URL): Promise<ProductHit | { error: string }> {
-  const match = url.pathname.match(/\/p\/(\d+)/);
-  if (!match) return { error: "No se encontró el identificador del producto en el enlace" };
-  const pid = match[1];
+  const parts = url.pathname.split("/").filter(Boolean);
+
+  // Pattern 1: /p/[pid]
+  let pid: string | undefined;
+  const pIdx = parts.indexOf("p");
+  if (pIdx >= 0 && /^\d+$/.test(parts[pIdx + 1] ?? "")) {
+    pid = parts[pIdx + 1];
+  }
+
+  // Pattern 2: last all-numeric segment (covers /producto/.../[pid])
+  if (!pid) {
+    pid = [...parts].reverse().find((p) => /^\d+$/.test(p));
+  }
+
+  if (!pid) return { error: "No se encontró el identificador del producto en el enlace" };
 
   // Bloomreach: buscar por PID como keyword para obtener nombre e imagen
   const brParams = new URLSearchParams({
