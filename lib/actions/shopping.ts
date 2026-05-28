@@ -673,10 +673,12 @@ export async function ensureActiveList(): Promise<{ id: string } | { error: stri
   }
   if (!newList) return { error: "No se pudo crear la lista" };
 
-  if (lastPurchased?.id) {
+  // Preferir plantilla si existe; de lo contrario copiar la última compra
+  const usedTemplate = await copyTemplateItemsTo(supabase, userId, newList.id);
+  if (!usedTemplate && lastPurchased?.id) {
     const { data: prevItems } = await supabase
       .from("shopping_list_items")
-      .select("name, store, quantity, unit_price, image_url, product_url, external_id")
+      .select("name, store, quantity, unit_price, image_url, product_url, external_id, category_override")
       .eq("list_id", lastPurchased.id);
     if (prevItems && prevItems.length > 0) {
       await supabase.from("shopping_list_items").insert(
@@ -689,6 +691,7 @@ export async function ensureActiveList(): Promise<{ id: string } | { error: stri
           image_url: it.image_url,
           product_url: it.product_url,
           external_id: it.external_id,
+          category_override: it.category_override ?? null,
           is_checked: false,
         })),
       );
@@ -935,7 +938,7 @@ export async function markListAsPurchased(input: {
   // 1. Cargar items
   const { data: items, error: itemsErr } = await supabase
     .from("shopping_list_items")
-    .select("name, store, quantity, unit_price, image_url, product_url, external_id")
+    .select("name, store, quantity, unit_price, image_url, product_url, external_id, category_override")
     .eq("list_id", input.list_id);
   if (itemsErr) return { error: itemsErr.message };
   if (!items || items.length === 0) return { error: "La lista está vacía" };
@@ -1043,7 +1046,9 @@ export async function markListAsPurchased(input: {
   if (newErr || !newList) {
     return { error: `Egresos creados, pero no se pudo crear la nueva lista: ${newErr?.message ?? ""}` };
   }
-  if (items.length > 0) {
+  // Preferir plantilla si existe; si no, copiar los ítems de la lista que acaba de comprarse
+  const usedTemplate = await copyTemplateItemsTo(supabase, userId, newList.id);
+  if (!usedTemplate && items.length > 0) {
     await supabase.from("shopping_list_items").insert(
       items.map((it) => ({
         list_id: newList.id,
@@ -1054,6 +1059,7 @@ export async function markListAsPurchased(input: {
         image_url: it.image_url,
         product_url: it.product_url,
         external_id: it.external_id,
+        category_override: it.category_override ?? null,
         is_checked: false,
       })),
     );
@@ -1065,6 +1071,136 @@ export async function markListAsPurchased(input: {
   revalidatePath("/personal/budgets");
 
   return { success: true, walmartTxId, pricesmartTxId, agromercadoTxId, dollarcityTxId, newListId: newList.id };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Plantilla (template) — lista base que persiste entre compras
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type TemplateInfo = { itemCount: number };
+
+/** Retorna el conteo de ítems de la plantilla, o null si no existe. */
+export async function getTemplate(): Promise<TemplateInfo | null> {
+  const userId = await getCurrentUserId();
+  if (!userId) return null;
+  const supabase = await createClient();
+
+  const { data: tmpl } = await supabase
+    .from("shopping_lists")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("status", "template")
+    .maybeSingle();
+  if (!tmpl?.id) return null;
+
+  const { count } = await supabase
+    .from("shopping_list_items")
+    .select("id", { count: "exact", head: true })
+    .eq("list_id", tmpl.id);
+
+  return { itemCount: count ?? 0 };
+}
+
+/**
+ * Guarda (o actualiza) la plantilla con los ítems de la lista activa actual.
+ * Si ya existe una plantilla, reemplaza sus ítems.
+ */
+export async function saveAsTemplate(): Promise<{ itemCount: number } | { error: string }> {
+  const userId = await getCurrentUserId();
+  if (!userId) return { error: "No autenticado" };
+  const supabase = await createClient();
+
+  // Obtener lista activa
+  const { data: active } = await supabase
+    .from("shopping_lists")
+    .select("id")
+    .eq("scope", "personal")
+    .eq("status", "active")
+    .maybeSingle();
+  if (!active?.id) return { error: "No hay lista activa" };
+
+  // Ítems actuales
+  const { data: activeItems } = await supabase
+    .from("shopping_list_items")
+    .select("name, store, quantity, unit_price, image_url, product_url, external_id, category_override")
+    .eq("list_id", active.id);
+  if (!activeItems || activeItems.length === 0) return { error: "La lista activa está vacía" };
+
+  // Buscar o crear plantilla
+  let templateId: string;
+  const { data: existing } = await supabase
+    .from("shopping_lists")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("status", "template")
+    .maybeSingle();
+
+  if (existing?.id) {
+    templateId = existing.id;
+    // Borrar ítems anteriores de la plantilla
+    await supabase.from("shopping_list_items").delete().eq("list_id", templateId);
+  } else {
+    const { data: created, error: cErr } = await supabase
+      .from("shopping_lists")
+      .insert({ user_id: userId, scope: "personal", name: "Plantilla", status: "template" })
+      .select("id")
+      .single();
+    if (cErr || !created) return { error: cErr?.message ?? "No se pudo crear la plantilla" };
+    templateId = created.id;
+  }
+
+  // Copiar ítems activos a la plantilla
+  const { error: iErr } = await supabase.from("shopping_list_items").insert(
+    activeItems.map((it) => ({
+      list_id: templateId,
+      name: it.name,
+      store: it.store,
+      quantity: it.quantity,
+      unit_price: it.unit_price,
+      image_url: it.image_url,
+      product_url: it.product_url,
+      external_id: it.external_id,
+      category_override: it.category_override ?? null,
+      is_checked: false,
+    })),
+  );
+  if (iErr) return { error: iErr.message };
+
+  revalidatePath("/personal/mercado");
+  return { itemCount: activeItems.length };
+}
+
+/** Copia los ítems de la plantilla a una lista destino (si existe plantilla). */
+async function copyTemplateItemsTo(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, targetListId: string): Promise<boolean> {
+  const { data: tmpl } = await supabase
+    .from("shopping_lists")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("status", "template")
+    .maybeSingle();
+  if (!tmpl?.id) return false;
+
+  const { data: tmplItems } = await supabase
+    .from("shopping_list_items")
+    .select("name, store, quantity, unit_price, image_url, product_url, external_id, category_override")
+    .eq("list_id", tmpl.id);
+  if (!tmplItems || tmplItems.length === 0) return false;
+
+  await supabase.from("shopping_list_items").insert(
+    tmplItems.map((it) => ({
+      list_id: targetListId,
+      name: it.name,
+      store: it.store,
+      quantity: it.quantity,
+      unit_price: it.unit_price,
+      image_url: it.image_url,
+      product_url: it.product_url,
+      external_id: it.external_id,
+      category_override: it.category_override ?? null,
+      is_checked: false,
+    })),
+  );
+  return true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

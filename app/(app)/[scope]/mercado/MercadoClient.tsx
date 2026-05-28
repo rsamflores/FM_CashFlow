@@ -14,6 +14,7 @@ import {
   getListItems,
   importItems,
   fetchGenericImage,
+  saveAsTemplate,
   type ShoppingListRow,
   type ShoppingListItemRow,
   type Suggestion,
@@ -21,6 +22,7 @@ import {
   type StoreBudgetSnapshot,
   type Store,
   type HistoryEntry,
+  type TemplateInfo,
 } from "@/lib/actions/shopping";
 import { PurchaseDialog } from "./PurchaseDialog";
 
@@ -32,6 +34,7 @@ type Props = {
   accounts: AccountRow[];
   categories: CategoryRow[];
   history: HistoryEntry[];
+  template: TemplateInfo | null;
 };
 
 const STORE_LABEL: Record<Store, string> = {
@@ -191,9 +194,27 @@ export function MercadoClient({
   accounts,
   categories,
   history,
+  template,
 }: Props) {
   const [purchaseOpen, setPurchaseOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("store");
+  const [templateInfo, setTemplateInfo] = useState<TemplateInfo | null>(template);
+  const [templatePending, startTemplateTx] = useTransition();
+  const [templateMsg, setTemplateMsg] = useState<string | null>(null);
+
+  function handleSaveTemplate() {
+    setTemplateMsg(null);
+    startTemplateTx(async () => {
+      const res = await saveAsTemplate();
+      if ("error" in res) {
+        setTemplateMsg("Error: " + res.error);
+      } else {
+        setTemplateInfo({ itemCount: res.itemCount });
+        setTemplateMsg(`Plantilla guardada con ${res.itemCount} producto${res.itemCount !== 1 ? "s" : ""}`);
+        setTimeout(() => setTemplateMsg(null), 3500);
+      }
+    });
+  }
 
   // Totals per store
   const sum = (s: Store) =>
@@ -208,23 +229,56 @@ export function MercadoClient({
   return (
     <div className="flex flex-col gap-lg">
       {/* Header */}
-      <header className="flex items-end justify-between flex-wrap gap-md">
-        <div>
-          <h2 className="text-headline-lg text-on-surface">{list.name}</h2>
-          <p className="text-body-sm text-on-surface-variant">
-            {items.length} item{items.length !== 1 ? "s" : ""} · Total{" "}
-            <span className="font-bold text-on-surface">{formatCurrency(grandTotal)}</span>
-          </p>
+      <header className="flex flex-col gap-sm">
+        <div className="flex items-end justify-between flex-wrap gap-md">
+          <div>
+            <h2 className="text-headline-lg text-on-surface">{list.name}</h2>
+            <p className="text-body-sm text-on-surface-variant">
+              {items.length} item{items.length !== 1 ? "s" : ""} · Total{" "}
+              <span className="font-bold text-on-surface">{formatCurrency(grandTotal)}</span>
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={grandTotal <= 0}
+            onClick={() => setPurchaseOpen(true)}
+            className="h-10 px-lg rounded-full bg-primary-container text-on-primary-container font-bold flex items-center gap-xs disabled:opacity-50 hover:opacity-90 transition-opacity"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>shopping_cart_checkout</span>
+            Marcar como comprada
+          </button>
         </div>
-        <button
-          type="button"
-          disabled={grandTotal <= 0}
-          onClick={() => setPurchaseOpen(true)}
-          className="h-10 px-lg rounded-full bg-primary-container text-on-primary-container font-bold flex items-center gap-xs disabled:opacity-50 hover:opacity-90 transition-opacity"
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>shopping_cart_checkout</span>
-          Marcar como comprada
-        </button>
+
+        {/* Template bar */}
+        <div className="flex items-center gap-sm flex-wrap">
+          <button
+            type="button"
+            disabled={templatePending || items.length === 0}
+            onClick={handleSaveTemplate}
+            className="h-8 px-md rounded-full text-body-sm font-bold flex items-center gap-xs transition-colors disabled:opacity-50"
+            style={{
+              background: templateInfo ? "var(--color-secondary-container)" : "var(--color-surface-container-high)",
+              color: templateInfo ? "var(--color-on-secondary-container)" : "var(--color-on-surface-variant)",
+            }}
+            title={templateInfo
+              ? `Actualizar plantilla (actualmente ${templateInfo.itemCount} productos)`
+              : "Guardar lista actual como plantilla base"}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>
+              {templatePending ? "hourglass_empty" : templateInfo ? "bookmark" : "bookmark_add"}
+            </span>
+            {templatePending
+              ? "Guardando…"
+              : templateInfo
+              ? `Plantilla: ${templateInfo.itemCount} productos · Actualizar`
+              : "Guardar como plantilla"}
+          </button>
+          {templateMsg && (
+            <span className="text-label-md" style={{ color: templateMsg.startsWith("Error") ? "var(--color-error)" : "var(--color-tertiary)" }}>
+              {templateMsg}
+            </span>
+          )}
+        </div>
       </header>
 
       {/* Budget cards */}

@@ -3,7 +3,7 @@ import { Topbar } from "@/components/shell/Topbar";
 import { SCOPE_LABEL } from "@/lib/scope";
 import { getAccounts } from "@/lib/actions/accounts";
 import { getCategories } from "@/lib/actions/categories";
-import { ensureActiveList, getActiveList, getHistory } from "@/lib/actions/shopping";
+import { ensureActiveList, getActiveList, getHistory, getTemplate } from "@/lib/actions/shopping";
 import { MercadoClient } from "./MercadoClient";
 
 export default async function MercadoPage({
@@ -24,11 +24,12 @@ export default async function MercadoPage({
     );
   }
 
-  const [payload, accounts, categories, history] = await Promise.all([
+  const [payload, accounts, categories, history, template] = await Promise.all([
     getActiveList(),
     getAccounts("personal"),
     getCategories("personal"),
     getHistory(10),
+    getTemplate(),
   ]);
 
   if ("error" in payload) {
@@ -54,6 +55,7 @@ export default async function MercadoPage({
         accounts={activeAccounts}
         categories={expenseCategories}
         history={history}
+        template={template}
       />
     </>
   );
