@@ -9,7 +9,13 @@ import {
   type StoreBudgetSnapshot,
 } from "@/lib/actions/shopping";
 
-type Totals = { walmart: number; pricesmart: number; manual: number };
+type Totals = {
+  walmart: number;
+  pricesmart: number;
+  agromercado: number;
+  dollarcity: number;
+  manual: number;
+};
 
 type Props = {
   open: boolean;
@@ -30,68 +36,81 @@ export function PurchaseDialog({
   accounts,
   categories,
 }: Props) {
-  // Defaults: cuenta y categoría por tienda según el plan
-  const walmartCategoryDefault = useMemo(() => {
-    if (budgets.walmart.category_id) return budgets.walmart.category_id;
-    return categories.find((c) => /supermercado/i.test(c.name))?.id ?? categories[0]?.id ?? "";
-  }, [budgets.walmart.category_id, categories]);
+  // ── Defaults por tienda ────────────────────────────────────────────────────
+  const firstNonCredit = useMemo(
+    () => accounts.find((a) => a.type !== "credit_card")?.id ?? accounts[0]?.id ?? "",
+    [accounts],
+  );
+  const firstCard = useMemo(
+    () => accounts.find((a) => a.type === "credit_card")?.id ?? accounts[0]?.id ?? "",
+    [accounts],
+  );
+  const psCard = useMemo(
+    () =>
+      accounts.find((a) => a.type === "credit_card" && /pricesmart/i.test(a.name))?.id ??
+      firstCard,
+    [accounts, firstCard],
+  );
 
-  const pricesmartCategoryDefault = useMemo(() => {
-    if (budgets.pricesmart.category_id) return budgets.pricesmart.category_id;
-    return categories.find((c) => /pricesmart/i.test(c.name))?.id ?? categories[0]?.id ?? "";
-  }, [budgets.pricesmart.category_id, categories]);
+  const catSuper = useMemo(
+    () =>
+      budgets.walmart.category_id ??
+      categories.find((c) => /supermercado/i.test(c.name))?.id ??
+      categories[0]?.id ?? "",
+    [budgets.walmart.category_id, categories],
+  );
+  const catPS = useMemo(
+    () =>
+      budgets.pricesmart.category_id ??
+      categories.find((c) => /pricesmart/i.test(c.name))?.id ??
+      categories[0]?.id ?? "",
+    [budgets.pricesmart.category_id, categories],
+  );
+  const catOther = useMemo(
+    () => categories.find((c) => /supermercado|hogar/i.test(c.name))?.id ?? categories[0]?.id ?? "",
+    [categories],
+  );
 
-  const walmartAccountDefault = useMemo(() => {
-    const nonCredit = accounts.filter((a) => a.type !== "credit_card");
-    return nonCredit[0]?.id ?? accounts[0]?.id ?? "";
-  }, [accounts]);
+  // ── Estado por tienda ──────────────────────────────────────────────────────
+  const [walmartAccount,     setWalmartAccount]     = useState(firstNonCredit);
+  const [walmartCategory,    setWalmartCategory]    = useState(catSuper);
+  const [pricesmartAccount,  setPricesmartAccount]  = useState(psCard);
+  const [pricesmartCategory, setPricesmartCategory] = useState(catPS);
+  const [agroAccount,        setAgroAccount]        = useState(firstNonCredit);
+  const [agroCategory,       setAgroCategory]       = useState(catOther);
+  const [dcAccount,          setDcAccount]          = useState(firstNonCredit);
+  const [dcCategory,         setDcCategory]         = useState(catOther);
 
-  const pricesmartAccountDefault = useMemo(() => {
-    const psCard = accounts.find(
-      (a) => a.type === "credit_card" && /pricesmart/i.test(a.name),
-    );
-    if (psCard) return psCard.id;
-    const anyCard = accounts.find((a) => a.type === "credit_card");
-    if (anyCard) return anyCard.id;
-    return accounts[0]?.id ?? "";
-  }, [accounts]);
-
-  const [walmartAccount, setWalmartAccount] = useState(walmartAccountDefault);
-  const [walmartCategory, setWalmartCategory] = useState(walmartCategoryDefault);
-  const [pricesmartAccount, setPricesmartAccount] = useState(pricesmartAccountDefault);
-  const [pricesmartCategory, setPricesmartCategory] = useState(pricesmartCategoryDefault);
-  const [manualTarget, setManualTarget] = useState<"walmart" | "pricesmart">("walmart");
+  const [manualTarget, setManualTarget] = useState<"walmart" | "pricesmart" | "agromercado" | "dollarcity">("walmart");
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   if (!open) return null;
 
-  const walmartGroupTotal =
-    totals.walmart + (manualTarget === "walmart" ? totals.manual : 0);
-  const pricesmartGroupTotal =
-    totals.pricesmart + (manualTarget === "pricesmart" ? totals.manual : 0);
   const hasManual = totals.manual > 0;
-  const hasWalmart = walmartGroupTotal > 0;
-  const hasPricesmart = pricesmartGroupTotal > 0;
-  const grand = walmartGroupTotal + pricesmartGroupTotal;
+  const mt = manualTarget;
+  const walmartTotal     = totals.walmart     + (mt === "walmart"      ? totals.manual : 0);
+  const pricesmartTotal  = totals.pricesmart  + (mt === "pricesmart"   ? totals.manual : 0);
+  const agroTotal        = totals.agromercado + (mt === "agromercado"  ? totals.manual : 0);
+  const dcTotal          = totals.dollarcity  + (mt === "dollarcity"   ? totals.manual : 0);
+
+  const grand = walmartTotal + pricesmartTotal + agroTotal + dcTotal;
 
   function submit() {
     setError(null);
-    if (hasWalmart && (!walmartAccount || !walmartCategory))
-      return setError("Falta cuenta o categoría para el grupo Walmart");
-    if (hasPricesmart && (!pricesmartAccount || !pricesmartCategory))
-      return setError("Falta cuenta o categoría para el grupo PriceSmart");
+    if (walmartTotal    > 0 && (!walmartAccount     || !walmartCategory))    return setError("Falta cuenta o categoría para Walmart");
+    if (pricesmartTotal > 0 && (!pricesmartAccount  || !pricesmartCategory)) return setError("Falta cuenta o categoría para PriceSmart");
+    if (agroTotal       > 0 && (!agroAccount        || !agroCategory))       return setError("Falta cuenta o categoría para Agromercado");
+    if (dcTotal         > 0 && (!dcAccount          || !dcCategory))         return setError("Falta cuenta o categoría para Dollar City");
 
     startTransition(async () => {
       const res = await markListAsPurchased({
         list_id: listId,
-        walmart: hasWalmart
-          ? { account_id: walmartAccount, category_id: walmartCategory }
-          : undefined,
-        pricesmart: hasPricesmart
-          ? { account_id: pricesmartAccount, category_id: pricesmartCategory }
-          : undefined,
+        walmart:     walmartTotal    > 0 ? { account_id: walmartAccount,    category_id: walmartCategory }    : undefined,
+        pricesmart:  pricesmartTotal > 0 ? { account_id: pricesmartAccount, category_id: pricesmartCategory } : undefined,
+        agromercado: agroTotal       > 0 ? { account_id: agroAccount,       category_id: agroCategory }       : undefined,
+        dollarcity:  dcTotal         > 0 ? { account_id: dcAccount,         category_id: dcCategory }         : undefined,
         manual_target: manualTarget,
         description: description.trim() || undefined,
       });
@@ -99,6 +118,14 @@ export function PurchaseDialog({
       else onClose();
     });
   }
+
+  // Opciones de destino para items manuales (solo tiendas con items propios o la tienda activa)
+  const manualOptions: { value: typeof manualTarget; label: string }[] = [
+    { value: "walmart",     label: "Walmart" },
+    { value: "pricesmart",  label: "PriceSmart" },
+    { value: "agromercado", label: "Agromercado" },
+    { value: "dollarcity",  label: "Dollar City" },
+  ];
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
@@ -125,73 +152,80 @@ export function PurchaseDialog({
         <div className="p-lg flex flex-col gap-md">
           {/* Resumen */}
           <div className="rounded-xl border border-outline-variant/15 bg-surface-container-high p-md">
-            <p className="text-label-md text-on-surface-variant">Total</p>
+            <p className="text-label-md text-on-surface-variant">Total compra</p>
             <p className="text-headline-lg-mobile font-bold text-on-surface">
               {formatCurrency(grand)}
             </p>
-            <p className="text-label-md text-on-surface-variant mt-xs">
-              Walmart {formatCurrency(walmartGroupTotal)} · PriceSmart {formatCurrency(pricesmartGroupTotal)}
-              {hasManual && ` · Manual ${formatCurrency(totals.manual)} (asignado abajo)`}
-            </p>
+            <div className="flex flex-wrap gap-x-md gap-y-xs mt-xs">
+              {[
+                { label: "Walmart",      total: walmartTotal,    color: "#0071ce" },
+                { label: "PriceSmart",   total: pricesmartTotal, color: "#ef4123" },
+                { label: "Agromercado",  total: agroTotal,       color: "#2e7d32" },
+                { label: "Dollar City",  total: dcTotal,         color: "#f59e0b" },
+              ]
+                .filter((s) => s.total > 0)
+                .map((s) => (
+                  <span key={s.label} className="text-label-md" style={{ color: s.color }}>
+                    {s.label} {formatCurrency(s.total)}
+                  </span>
+                ))}
+            </div>
           </div>
 
+          {/* Items manuales — asignar a tienda */}
           {hasManual && (
             <div className="rounded-xl border border-outline-variant/15 bg-surface-container-low p-md flex flex-col gap-xs">
               <p className="text-label-md text-on-surface-variant">
-                Items manuales ({formatCurrency(totals.manual)}) — ¿a qué grupo se suman?
+                Items &quot;Otro&quot; ({formatCurrency(totals.manual)}) — sumar a:
               </p>
-              <div className="flex gap-sm">
-                <label className="flex items-center gap-xs text-body-sm">
-                  <input
-                    type="radio"
-                    name="manual_target"
-                    checked={manualTarget === "walmart"}
-                    onChange={() => setManualTarget("walmart")}
-                    className="accent-primary"
-                  />
-                  Supermercado / Walmart
-                </label>
-                <label className="flex items-center gap-xs text-body-sm">
-                  <input
-                    type="radio"
-                    name="manual_target"
-                    checked={manualTarget === "pricesmart"}
-                    onChange={() => setManualTarget("pricesmart")}
-                    className="accent-primary"
-                  />
-                  PriceSmart
-                </label>
+              <div className="flex flex-wrap gap-sm">
+                {manualOptions.map((opt) => (
+                  <label key={opt.value} className="flex items-center gap-xs text-body-sm">
+                    <input
+                      type="radio"
+                      name="manual_target"
+                      checked={manualTarget === opt.value}
+                      onChange={() => setManualTarget(opt.value)}
+                      className="accent-primary"
+                    />
+                    {opt.label}
+                  </label>
+                ))}
               </div>
             </div>
           )}
 
-          {hasWalmart && (
+          {/* Grupos por tienda */}
+          {walmartTotal > 0 && (
             <GroupSection
-              title="Egreso Walmart"
-              accent="#0071ce"
-              icon="shopping_cart"
-              total={walmartGroupTotal}
-              account={walmartAccount}
-              category={walmartCategory}
-              accounts={accounts}
-              categories={categories}
-              onAccount={setWalmartAccount}
-              onCategory={setWalmartCategory}
+              title="Walmart" accent="#0071ce" icon="shopping_cart"
+              total={walmartTotal} account={walmartAccount} category={walmartCategory}
+              accounts={accounts} categories={categories}
+              onAccount={setWalmartAccount} onCategory={setWalmartCategory}
             />
           )}
-
-          {hasPricesmart && (
+          {pricesmartTotal > 0 && (
             <GroupSection
-              title="Egreso PriceSmart"
-              accent="#e30613"
-              icon="store"
-              total={pricesmartGroupTotal}
-              account={pricesmartAccount}
-              category={pricesmartCategory}
-              accounts={accounts}
-              categories={categories}
-              onAccount={setPricesmartAccount}
-              onCategory={setPricesmartCategory}
+              title="PriceSmart" accent="#ef4123" icon="store"
+              total={pricesmartTotal} account={pricesmartAccount} category={pricesmartCategory}
+              accounts={accounts} categories={categories}
+              onAccount={setPricesmartAccount} onCategory={setPricesmartCategory}
+            />
+          )}
+          {agroTotal > 0 && (
+            <GroupSection
+              title="Agromercado" accent="#2e7d32" icon="storefront"
+              total={agroTotal} account={agroAccount} category={agroCategory}
+              accounts={accounts} categories={categories}
+              onAccount={setAgroAccount} onCategory={setAgroCategory}
+            />
+          )}
+          {dcTotal > 0 && (
+            <GroupSection
+              title="Dollar City" accent="#f59e0b" icon="sell"
+              total={dcTotal} account={dcAccount} category={dcCategory}
+              accounts={accounts} categories={categories}
+              onAccount={setDcAccount} onCategory={setDcCategory}
             />
           )}
 
@@ -232,27 +266,14 @@ export function PurchaseDialog({
 }
 
 function GroupSection({
-  title,
-  accent,
-  icon,
-  total,
-  account,
-  category,
-  accounts,
-  categories,
-  onAccount,
-  onCategory,
+  title, accent, icon, total,
+  account, category, accounts, categories,
+  onAccount, onCategory,
 }: {
-  title: string;
-  accent: string;
-  icon: string;
-  total: number;
-  account: string;
-  category: string;
-  accounts: AccountRow[];
-  categories: CategoryRow[];
-  onAccount: (v: string) => void;
-  onCategory: (v: string) => void;
+  title: string; accent: string; icon: string; total: number;
+  account: string; category: string;
+  accounts: AccountRow[]; categories: CategoryRow[];
+  onAccount: (v: string) => void; onCategory: (v: string) => void;
 }) {
   return (
     <div
@@ -263,9 +284,7 @@ function GroupSection({
         <span className="material-symbols-outlined" style={{ fontSize: 18, color: accent }}>
           {icon}
         </span>
-        <h4 className="text-body-sm font-bold flex-1" style={{ color: accent }}>
-          {title}
-        </h4>
+        <h4 className="text-body-sm font-bold flex-1" style={{ color: accent }}>{title}</h4>
         <span className="text-body-sm font-bold text-on-surface">{formatCurrency(total)}</span>
       </div>
       <label className="flex flex-col gap-xs">
@@ -277,8 +296,7 @@ function GroupSection({
         >
           {accounts.map((a) => (
             <option key={a.id} value={a.id}>
-              {a.name}
-              {a.type === "credit_card" ? " (tarjeta)" : ""}
+              {a.name}{a.type === "credit_card" ? " (tarjeta)" : ""}
             </option>
           ))}
         </select>
@@ -291,9 +309,7 @@ function GroupSection({
           className="h-10 px-md rounded-lg bg-surface-container text-on-surface text-body-sm outline-none border-none"
         >
           {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
+            <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
       </label>

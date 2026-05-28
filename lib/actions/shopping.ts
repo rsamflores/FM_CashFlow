@@ -8,7 +8,7 @@ import { svToday } from "@/lib/format";
 // Tipos
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type Store = "walmart" | "pricesmart" | "manual";
+export type Store = "walmart" | "pricesmart" | "manual" | "agromercado" | "dollarcity";
 export type ListStatus = "active" | "purchased" | "archived";
 
 export type ProductHit = {
@@ -678,14 +678,25 @@ export async function toggleItemChecked(id: string, value: boolean) {
 // Marcar como comprada → crea 1 o 2 egresos pendientes + nueva lista activa
 // ─────────────────────────────────────────────────────────────────────────────
 
+type StorePayment = { account_id: string; category_id: string };
+
 export async function markListAsPurchased(input: {
   list_id: string;
-  walmart?: { account_id: string; category_id: string };
-  pricesmart?: { account_id: string; category_id: string };
-  manual_target: "walmart" | "pricesmart";
+  walmart?: StorePayment;
+  pricesmart?: StorePayment;
+  agromercado?: StorePayment;
+  dollarcity?: StorePayment;
+  manual_target: "walmart" | "pricesmart" | "agromercado" | "dollarcity";
   description?: string;
 }): Promise<
-  | { success: true; walmartTxId?: string; pricesmartTxId?: string; newListId: string }
+  | {
+      success: true;
+      walmartTxId?: string;
+      pricesmartTxId?: string;
+      agromercadoTxId?: string;
+      dollarcityTxId?: string;
+      newListId: string;
+    }
   | { error: string }
 > {
   const userId = await getCurrentUserId();
@@ -700,107 +711,96 @@ export async function markListAsPurchased(input: {
   if (itemsErr) return { error: itemsErr.message };
   if (!items || items.length === 0) return { error: "La lista está vacía" };
 
-  const sum = (filter: (i: { store: string }) => boolean) =>
+  const sumStore = (s: string) =>
     items
-      .filter(filter)
-      .reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0);
+      .filter((i) => i.store === s)
+      .reduce((acc, i) => acc + Number(i.quantity) * Number(i.unit_price), 0);
 
-  const walmartItemsTotal = sum((i) => i.store === "walmart");
-  const pricesmartItemsTotal = sum((i) => i.store === "pricesmart");
-  const manualTotal = sum((i) => i.store === "manual");
+  const manualTotal = sumStore("manual");
+  const mt = input.manual_target;
 
-  const walmartTotal =
-    Math.round(
-      (walmartItemsTotal + (input.manual_target === "walmart" ? manualTotal : 0)) * 100,
-    ) / 100;
-  const pricesmartTotal =
-    Math.round(
-      (pricesmartItemsTotal + (input.manual_target === "pricesmart" ? manualTotal : 0)) * 100,
-    ) / 100;
+  const r = (n: number) => Math.round(n * 100) / 100;
+  const walmartTotal      = r(sumStore("walmart")      + (mt === "walmart"      ? manualTotal : 0));
+  const pricesmartTotal   = r(sumStore("pricesmart")   + (mt === "pricesmart"   ? manualTotal : 0));
+  const agromercadoTotal  = r(sumStore("agromercado")  + (mt === "agromercado"  ? manualTotal : 0));
+  const dollarcityTotal   = r(sumStore("dollarcity")   + (mt === "dollarcity"   ? manualTotal : 0));
 
-  if (walmartTotal === 0 && pricesmartTotal === 0) {
-    return { error: "El total es 0" };
-  }
-  if (walmartTotal > 0 && !input.walmart) {
-    return { error: "Falta seleccionar cuenta y categoría para el grupo Walmart" };
-  }
-  if (pricesmartTotal > 0 && !input.pricesmart) {
-    return { error: "Falta seleccionar cuenta y categoría para el grupo PriceSmart" };
+  const grandTotal = walmartTotal + pricesmartTotal + agromercadoTotal + dollarcityTotal;
+  if (grandTotal === 0) return { error: "El total es 0" };
+
+  // Validar que se proporcionó cuenta+categoría para cada grupo con total > 0
+  const pairs: [number, StorePayment | undefined, string][] = [
+    [walmartTotal,     input.walmart,     "Walmart"],
+    [pricesmartTotal,  input.pricesmart,  "PriceSmart"],
+    [agromercadoTotal, input.agromercado, "Agromercado"],
+    [dollarcityTotal,  input.dollarcity,  "Dollar City"],
+  ];
+  for (const [total, payment, label] of pairs) {
+    if (total > 0 && !payment)
+      return { error: `Falta cuenta y categoría para el grupo ${label}` };
   }
 
   const { dateStr: today } = svToday();
   const baseDesc = input.description?.trim() || "Mercado";
 
+  // 2. Crear egresos por tienda
+  async function createStoreTx(
+    total: number,
+    payment: StorePayment | undefined,
+    label: string,
+    storeKey: "walmart" | "pricesmart" | "agromercado" | "dollarcity",
+  ): Promise<string | undefined> {
+    if (total <= 0 || !payment) return undefined;
+    const { data: tx, error } = await supabase
+      .from("transactions")
+      .insert({
+        scope: "personal",
+        account_id: payment.account_id,
+        category_id: payment.category_id,
+        kind: "expense",
+        amount: total,
+        occurred_on: today,
+        description: `${baseDesc} — ${label}`,
+        is_planned: false,
+        is_confirmed: false,
+        affects_balance: true,
+        created_by: userId,
+      })
+      .select("id")
+      .single();
+    if (error || !tx) throw new Error(error?.message ?? `Error creando egreso ${label}`);
+    await supabase.from("shopping_list_transactions").insert({
+      list_id: input.list_id,
+      transaction_id: tx.id,
+      store: storeKey,
+    });
+    return tx.id;
+  }
+
   let walmartTxId: string | undefined;
   let pricesmartTxId: string | undefined;
-
-  // 2. Crear egreso Walmart
-  if (walmartTotal > 0 && input.walmart) {
-    const { data: tx, error } = await supabase
-      .from("transactions")
-      .insert({
-        scope: "personal",
-        account_id: input.walmart.account_id,
-        category_id: input.walmart.category_id,
-        kind: "expense",
-        amount: walmartTotal,
-        occurred_on: today,
-        description: `${baseDesc} — Walmart`,
-        is_planned: false,
-        is_confirmed: false,
-        affects_balance: true,
-        created_by: userId,
-      })
-      .select("id")
-      .single();
-    if (error || !tx) return { error: error?.message ?? "Error creando egreso Walmart" };
-    walmartTxId = tx.id;
-    await supabase.from("shopping_list_transactions").insert({
-      list_id: input.list_id,
-      transaction_id: tx.id,
-      store: "walmart",
-    });
+  let agromercadoTxId: string | undefined;
+  let dollarcityTxId: string | undefined;
+  try {
+    walmartTxId     = await createStoreTx(walmartTotal,     input.walmart,     "Walmart",      "walmart");
+    pricesmartTxId  = await createStoreTx(pricesmartTotal,  input.pricesmart,  "PriceSmart",   "pricesmart");
+    agromercadoTxId = await createStoreTx(agromercadoTotal, input.agromercado, "Agromercado",  "agromercado");
+    dollarcityTxId  = await createStoreTx(dollarcityTotal,  input.dollarcity,  "Dollar City",  "dollarcity");
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Error al crear egresos" };
   }
 
-  // 3. Crear egreso PriceSmart
-  if (pricesmartTotal > 0 && input.pricesmart) {
-    const { data: tx, error } = await supabase
-      .from("transactions")
-      .insert({
-        scope: "personal",
-        account_id: input.pricesmart.account_id,
-        category_id: input.pricesmart.category_id,
-        kind: "expense",
-        amount: pricesmartTotal,
-        occurred_on: today,
-        description: `${baseDesc} — PriceSmart`,
-        is_planned: false,
-        is_confirmed: false,
-        affects_balance: true,
-        created_by: userId,
-      })
-      .select("id")
-      .single();
-    if (error || !tx) return { error: error?.message ?? "Error creando egreso PriceSmart" };
-    pricesmartTxId = tx.id;
-    await supabase.from("shopping_list_transactions").insert({
-      list_id: input.list_id,
-      transaction_id: tx.id,
-      store: "pricesmart",
-    });
-  }
-
-  // 4. Archivar la lista actual
+  // 3. Archivar la lista actual
   await supabase
     .from("shopping_lists")
     .update({
       status: "purchased",
       purchased_at: new Date().toISOString(),
-      total_at_purchase: Math.round((walmartTotal + pricesmartTotal) * 100) / 100,
+      total_at_purchase: r(grandTotal),
     })
     .eq("id", input.list_id);
 
-  // 5. Crear nueva lista activa con items copiados
+  // 4. Crear nueva lista activa con items copiados
   const { data: newList, error: newErr } = await supabase
     .from("shopping_lists")
     .insert({
@@ -812,7 +812,6 @@ export async function markListAsPurchased(input: {
     .select("id")
     .single();
   if (newErr || !newList) {
-    // La lista vieja ya quedó purchased; reportamos pero el efecto principal está hecho
     return { error: `Egresos creados, pero no se pudo crear la nueva lista: ${newErr?.message ?? ""}` };
   }
   if (items.length > 0) {
@@ -836,7 +835,7 @@ export async function markListAsPurchased(input: {
   revalidatePath("/personal/dashboard");
   revalidatePath("/personal/budgets");
 
-  return { success: true, walmartTxId, pricesmartTxId, newListId: newList.id };
+  return { success: true, walmartTxId, pricesmartTxId, agromercadoTxId, dollarcityTxId, newListId: newList.id };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

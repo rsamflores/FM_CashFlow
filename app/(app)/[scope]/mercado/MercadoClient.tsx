@@ -31,21 +31,27 @@ type Props = {
 };
 
 const STORE_LABEL: Record<Store, string> = {
-  walmart: "Walmart",
-  pricesmart: "PriceSmart",
-  manual: "Otro",
+  walmart:     "Walmart",
+  pricesmart:  "PriceSmart",
+  agromercado: "Agromercado",
+  dollarcity:  "Dollar City",
+  manual:      "Otro",
 };
 
 const STORE_COLOR: Record<Store, string> = {
-  walmart: "#0071ce",
-  pricesmart: "#ef4123",
-  manual: "var(--color-tertiary)",
+  walmart:     "#0071ce",
+  pricesmart:  "#ef4123",
+  agromercado: "#2e7d32",
+  dollarcity:  "#f59e0b",
+  manual:      "var(--color-tertiary)",
 };
 
 const STORE_ICON: Record<Store, string> = {
-  walmart: "shopping_cart",
-  pricesmart: "store",
-  manual: "edit",
+  walmart:     "shopping_cart",
+  pricesmart:  "store",
+  agromercado: "storefront",
+  dollarcity:  "sell",
+  manual:      "edit",
 };
 
 export function MercadoClient({
@@ -62,10 +68,12 @@ export function MercadoClient({
   // Totals per store
   const sum = (s: Store) =>
     items.filter((i) => i.store === s).reduce((acc, i) => acc + Number(i.quantity) * Number(i.unit_price), 0);
-  const totalWalmart = sum("walmart");
-  const totalPricesmart = sum("pricesmart");
-  const totalManual = sum("manual");
-  const grandTotal = totalWalmart + totalPricesmart + totalManual;
+  const totalWalmart      = sum("walmart");
+  const totalPricesmart   = sum("pricesmart");
+  const totalAgromercado  = sum("agromercado");
+  const totalDollarcity   = sum("dollarcity");
+  const totalManual       = sum("manual");
+  const grandTotal = totalWalmart + totalPricesmart + totalAgromercado + totalDollarcity + totalManual;
 
   return (
     <div className="flex flex-col gap-lg">
@@ -113,7 +121,7 @@ export function MercadoClient({
         open={purchaseOpen}
         onClose={() => setPurchaseOpen(false)}
         listId={list.id}
-        totals={{ walmart: totalWalmart, pricesmart: totalPricesmart, manual: totalManual }}
+        totals={{ walmart: totalWalmart, pricesmart: totalPricesmart, agromercado: totalAgromercado, dollarcity: totalDollarcity, manual: totalManual }}
         budgets={budgets}
         accounts={accounts}
         categories={categories}
@@ -442,8 +450,10 @@ function ManualAddDialog({ listId, onClose }: { listId: string; onClose: () => v
             onChange={(e) => setStore(e.target.value as Store)}
             className="h-10 px-md rounded-lg bg-surface-container-high text-on-surface text-body-sm focus:ring-2 focus:ring-primary-container outline-none border-none"
           >
-            <option value="walmart">Walmart (Supermercado)</option>
+            <option value="walmart">Walmart</option>
             <option value="pricesmart">PriceSmart</option>
+            <option value="agromercado">Agromercado</option>
+            <option value="dollarcity">Dollar City</option>
             <option value="manual">Otro / sin tienda</option>
           </select>
         </label>
@@ -506,7 +516,7 @@ function ItemGroups({ items }: { items: ShoppingListItemRow[] }) {
     );
   }
 
-  const stores: Store[] = ["walmart", "pricesmart", "manual"];
+  const stores: Store[] = ["walmart", "pricesmart", "agromercado", "dollarcity", "manual"];
   return (
     <div className="flex flex-col gap-md">
       {stores.map((store) => {
