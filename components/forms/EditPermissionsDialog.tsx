@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect } from "react";
 import { updateMemberPermissions } from "@/lib/actions/team";
 import { setEmployeeAssignments } from "@/lib/actions/employee";
 
-type Role = "editor" | "viewer" | "recorder" | "employee" | "owner";
+type Role = "editor" | "viewer" | "recorder" | "employee" | "owner" | "shopper";
 
 type CategoryOption = {
   id: string;
@@ -24,11 +24,12 @@ type Props = {
 };
 
 const ROLE_INFO: Record<Role, { label: string; desc: string }> = {
-  owner:    { label: "Propietario",  desc: "Control total del sistema" },
-  editor:   { label: "Editor",       desc: "Puede crear y editar transacciones, cuentas y categorías" },
-  viewer:   { label: "Visor",        desc: "Solo puede ver la información, sin poder modificar nada" },
-  recorder: { label: "Registrador",  desc: "Solo puede registrar nuevos ingresos y egresos" },
-  employee: { label: "Empleado",     desc: "Registra gastos propios y solicita reembolsos en categorías asignadas" },
+  owner:    { label: "Propietario",       desc: "Control total del sistema" },
+  editor:   { label: "Editor",            desc: "Puede crear y editar transacciones, cuentas y categorías" },
+  viewer:   { label: "Visor",             desc: "Solo puede ver la información, sin poder modificar nada" },
+  recorder: { label: "Registrador",       desc: "Solo puede registrar nuevos ingresos y egresos" },
+  employee: { label: "Empleado",          desc: "Registra gastos propios y solicita reembolsos en categorías asignadas" },
+  shopper:  { label: "Lista de mercado",  desc: "Solo puede ver y editar la lista de compras — sin acceso a información financiera" },
 };
 
 export function EditPermissionsDialog({
@@ -59,12 +60,14 @@ export function EditPermissionsDialog({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, currentRole, currentScopes.join(","), currentAssignedCategories.join(",")]);
 
-  // When role switches to employee, force business-only scope
+  // When role switches to employee, force business-only; shopper, force personal-only
   useEffect(() => {
     if (role === "employee") setScopes(["business"]);
+    if (role === "shopper")  setScopes(["personal"]);
   }, [role]);
 
   function toggleScope(s: string) {
+    if (role === "employee" || role === "shopper") return; // scope locked by role
     setScopes((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]);
   }
 
@@ -131,7 +134,7 @@ export function EditPermissionsDialog({
             <div>
               <label className="text-label-md text-on-surface-variant block mb-xs">Rol</label>
               <div className="flex flex-col gap-sm">
-                {(["editor", "viewer", "recorder", "employee"] as Exclude<Role, "owner">[]).map((r) => (
+                {(["editor", "viewer", "recorder", "employee", "shopper"] as Exclude<Role, "owner">[]).map((r) => (
                   <button
                     key={r}
                     type="button"
@@ -155,8 +158,8 @@ export function EditPermissionsDialog({
               <div className="flex gap-sm">
                 {(["personal", "business"] as const).map((s) => {
                   const active = scopes.includes(s);
-                  // Employee role forces business scope only
-                  const disabled = role === "employee" && s === "personal";
+                  // Employee: business only; Shopper: personal only
+                  const disabled = (role === "employee" && s === "personal") || (role === "shopper" && s === "business");
                   return (
                     <button
                       key={s}

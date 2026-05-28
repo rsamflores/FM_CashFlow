@@ -35,6 +35,7 @@ type Props = {
   categories: CategoryRow[];
   history: HistoryEntry[];
   template: TemplateInfo | null;
+  userRole?: string;
 };
 
 const STORE_LABEL: Record<Store, string> = {
@@ -195,7 +196,9 @@ export function MercadoClient({
   categories,
   history,
   template,
+  userRole,
 }: Props) {
+  const isShopper = userRole === "shopper";
   const [purchaseOpen, setPurchaseOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("store");
   const [templateInfo, setTemplateInfo] = useState<TemplateInfo | null>(template);
@@ -238,54 +241,60 @@ export function MercadoClient({
               <span className="font-bold text-on-surface">{formatCurrency(grandTotal)}</span>
             </p>
           </div>
-          <button
-            type="button"
-            disabled={grandTotal <= 0}
-            onClick={() => setPurchaseOpen(true)}
-            className="h-10 px-lg rounded-full bg-primary-container text-on-primary-container font-bold flex items-center gap-xs disabled:opacity-50 hover:opacity-90 transition-opacity"
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>shopping_cart_checkout</span>
-            Marcar como comprada
-          </button>
-        </div>
-
-        {/* Template bar */}
-        <div className="flex items-center gap-sm flex-wrap">
-          <button
-            type="button"
-            disabled={templatePending || items.length === 0}
-            onClick={handleSaveTemplate}
-            className="h-8 px-md rounded-full text-body-sm font-bold flex items-center gap-xs transition-colors disabled:opacity-50"
-            style={{
-              background: templateInfo ? "var(--color-secondary-container)" : "var(--color-surface-container-high)",
-              color: templateInfo ? "var(--color-on-secondary-container)" : "var(--color-on-surface-variant)",
-            }}
-            title={templateInfo
-              ? `Actualizar plantilla (actualmente ${templateInfo.itemCount} productos)`
-              : "Guardar lista actual como plantilla base"}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>
-              {templatePending ? "hourglass_empty" : templateInfo ? "bookmark" : "bookmark_add"}
-            </span>
-            {templatePending
-              ? "Guardando…"
-              : templateInfo
-              ? `Plantilla: ${templateInfo.itemCount} productos · Actualizar`
-              : "Guardar como plantilla"}
-          </button>
-          {templateMsg && (
-            <span className="text-label-md" style={{ color: templateMsg.startsWith("Error") ? "var(--color-error)" : "var(--color-tertiary)" }}>
-              {templateMsg}
-            </span>
+          {!isShopper && (
+            <button
+              type="button"
+              disabled={grandTotal <= 0}
+              onClick={() => setPurchaseOpen(true)}
+              className="h-10 px-lg rounded-full bg-primary-container text-on-primary-container font-bold flex items-center gap-xs disabled:opacity-50 hover:opacity-90 transition-opacity"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>shopping_cart_checkout</span>
+              Marcar como comprada
+            </button>
           )}
         </div>
+
+        {/* Template bar — owners/editors only */}
+        {!isShopper && (
+          <div className="flex items-center gap-sm flex-wrap">
+            <button
+              type="button"
+              disabled={templatePending || items.length === 0}
+              onClick={handleSaveTemplate}
+              className="h-8 px-md rounded-full text-body-sm font-bold flex items-center gap-xs transition-colors disabled:opacity-50"
+              style={{
+                background: templateInfo ? "var(--color-secondary-container)" : "var(--color-surface-container-high)",
+                color: templateInfo ? "var(--color-on-secondary-container)" : "var(--color-on-surface-variant)",
+              }}
+              title={templateInfo
+                ? `Actualizar plantilla (actualmente ${templateInfo.itemCount} productos)`
+                : "Guardar lista actual como plantilla base"}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>
+                {templatePending ? "hourglass_empty" : templateInfo ? "bookmark" : "bookmark_add"}
+              </span>
+              {templatePending
+                ? "Guardando…"
+                : templateInfo
+                ? `Plantilla: ${templateInfo.itemCount} productos · Actualizar`
+                : "Guardar como plantilla"}
+            </button>
+            {templateMsg && (
+              <span className="text-label-md" style={{ color: templateMsg.startsWith("Error") ? "var(--color-error)" : "var(--color-tertiary)" }}>
+                {templateMsg}
+              </span>
+            )}
+          </div>
+        )}
       </header>
 
-      {/* Budget cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-        <BudgetCard store="walmart" snap={budgets.walmart} listTotal={totalWalmart} />
-        <BudgetCard store="pricesmart" snap={budgets.pricesmart} listTotal={totalPricesmart} />
-      </div>
+      {/* Budget cards — owners/editors only */}
+      {!isShopper && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+          <BudgetCard store="walmart" snap={budgets.walmart} listTotal={totalWalmart} />
+          <BudgetCard store="pricesmart" snap={budgets.pricesmart} listTotal={totalPricesmart} />
+        </div>
+      )}
 
       {/* Search / add panel */}
       <SearchPanel listId={list.id} />
@@ -321,13 +330,13 @@ export function MercadoClient({
       )}
       <ItemGroups items={items} viewMode={viewMode} />
 
-      {/* Suggestions */}
-      {suggestions.length > 0 && (
+      {/* Suggestions — owners/editors only */}
+      {!isShopper && suggestions.length > 0 && (
         <SuggestionsPanel suggestions={suggestions} listId={list.id} />
       )}
 
-      {/* History */}
-      {history.length > 0 && <HistoryPanel history={history} activeItems={items} listId={list.id} />}
+      {/* History — owners/editors only */}
+      {!isShopper && history.length > 0 && <HistoryPanel history={history} activeItems={items} listId={list.id} />}
 
       <PurchaseDialog
         open={purchaseOpen}

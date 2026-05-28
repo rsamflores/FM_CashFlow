@@ -8,7 +8,7 @@ import type { Scope } from "@/lib/scope";
 export type MemberRow = {
   user_id: string;
   scope: Scope;
-  role: "owner" | "editor" | "viewer" | "recorder" | "employee";
+  role: "owner" | "editor" | "viewer" | "recorder" | "employee" | "shopper";
   invited_email: string | null;
   full_name: string | null;
   email: string | null;
@@ -54,7 +54,7 @@ export async function getTeamMembers(): Promise<MemberRow[]> {
 
 export async function inviteMember(formData: FormData) {
   const email = (formData.get("email") as string)?.trim().toLowerCase();
-  const role = formData.get("role") as "editor" | "viewer" | "recorder" | "employee";
+  const role = formData.get("role") as "editor" | "viewer" | "recorder" | "employee" | "shopper";
   const scopes = formData.getAll("scope") as Scope[];
 
   if (!email) return { error: "El correo es requerido" };
@@ -117,7 +117,7 @@ export async function inviteMember(formData: FormData) {
   return { success: true };
 }
 
-export async function updateMemberRole(userId: string, scope: Scope, role: "editor" | "viewer" | "recorder" | "employee") {
+export async function updateMemberRole(userId: string, scope: Scope, role: "editor" | "viewer" | "recorder" | "employee" | "shopper") {
   const supabase = await createClient();
   const { error } = await supabase
     .from("memberships")
@@ -139,7 +139,7 @@ export async function resetMemberPassword(userId: string, newPassword: string) {
 
 export async function updateMemberPermissions(
   userId: string,
-  role: "editor" | "viewer" | "recorder" | "employee",
+  role: "editor" | "viewer" | "recorder" | "employee" | "shopper",
   scopes: Scope[],
 ) {
   if (!scopes.length) return { error: "Selecciona al menos un ámbito" };

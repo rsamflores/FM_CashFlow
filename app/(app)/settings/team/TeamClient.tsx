@@ -18,6 +18,7 @@ const ROLE_LABEL: Record<MemberRow["role"], string> = {
   viewer:   "Visor",
   recorder: "Registrador",
   employee: "Empleado",
+  shopper:  "Lista de mercado",
 };
 
 const ROLE_COLOR: Record<MemberRow["role"], string> = {
@@ -26,6 +27,7 @@ const ROLE_COLOR: Record<MemberRow["role"], string> = {
   viewer:   "var(--color-outline)",
   recorder: "var(--color-tertiary-fixed)",
   employee: "var(--color-tertiary)",
+  shopper:  "var(--color-secondary)",
 };
 
 const SCOPE_LABEL: Record<string, string> = {

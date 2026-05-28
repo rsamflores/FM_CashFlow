@@ -55,6 +55,15 @@ export default async function ScopeLayout({
     }
   }
 
+  // Redirect shopper users to the shopping list only
+  if (userRole === "shopper") {
+    const headersList = await headers();
+    const pathname = headersList.get("x-pathname") ?? "";
+    if (!pathname.startsWith("/personal/mercado")) {
+      redirect("/personal/mercado");
+    }
+  }
+
   return (
     <SidebarProvider>
       <div className="min-h-screen bg-surface">

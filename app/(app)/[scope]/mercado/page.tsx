@@ -4,6 +4,8 @@ import { SCOPE_LABEL } from "@/lib/scope";
 import { getAccounts } from "@/lib/actions/accounts";
 import { getCategories } from "@/lib/actions/categories";
 import { ensureActiveList, getActiveList, getHistory, getTemplate } from "@/lib/actions/shopping";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { MercadoClient } from "./MercadoClient";
 
 export default async function MercadoPage({
@@ -13,6 +15,23 @@ export default async function MercadoPage({
 }) {
   const { scope } = await params;
   if (scope !== "personal") notFound();
+
+  // Fetch current user role for this scope (to restrict UI for shopper)
+  let userRole: string | undefined;
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const admin = createAdminClient();
+      const { data } = await admin
+        .from("memberships")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("scope", "personal")
+        .maybeSingle();
+      userRole = data?.role ?? undefined;
+    }
+  } catch { /* non-fatal */ }
 
   const ensured = await ensureActiveList();
   if ("error" in ensured) {
@@ -56,6 +75,7 @@ export default async function MercadoPage({
         categories={expenseCategories}
         history={history}
         template={template}
+        userRole={userRole}
       />
     </>
   );

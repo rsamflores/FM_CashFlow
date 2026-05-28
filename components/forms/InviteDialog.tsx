@@ -17,16 +17,17 @@ type Props = {
 };
 
 const ROLE_INFO = {
-  editor:   { label: "Editor",       desc: "Puede crear y editar transacciones, cuentas y categorías" },
-  viewer:   { label: "Visor",        desc: "Solo puede ver la información, sin poder modificar nada" },
-  recorder: { label: "Registrador",  desc: "Solo puede registrar nuevos ingresos y egresos, sin acceso a configuración" },
-  employee: { label: "Empleado",     desc: "Registra gastos propios y solicita reembolsos en categorías asignadas" },
+  editor:   { label: "Editor",            desc: "Puede crear y editar transacciones, cuentas y categorías" },
+  viewer:   { label: "Visor",             desc: "Solo puede ver la información, sin poder modificar nada" },
+  recorder: { label: "Registrador",       desc: "Solo puede registrar nuevos ingresos y egresos, sin acceso a configuración" },
+  employee: { label: "Empleado",          desc: "Registra gastos propios y solicita reembolsos en categorías asignadas" },
+  shopper:  { label: "Lista de mercado",  desc: "Solo puede ver y editar la lista de compras — sin acceso a información financiera" },
 };
 
 export function InviteDialog({ open, onClose, businessCategories = [] }: Props) {
   const [isPending, startTransition] = useTransition();
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"editor" | "viewer" | "recorder" | "employee">("editor");
+  const [role, setRole] = useState<"editor" | "viewer" | "recorder" | "employee" | "shopper">("editor");
   const [scopes, setScopes] = useState<string[]>(["personal", "business"]);
   const [assignedCategoryIds, setAssignedCategoryIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -45,15 +46,15 @@ export function InviteDialog({ open, onClose, businessCategories = [] }: Props) 
     }
   }, [open]);
 
-  // Force business-only scope for employees
+  // Force personal-only scope for shoppers; business-only for employees
   useEffect(() => {
-    if (role === "employee") {
-      setScopes(["business"]);
-    }
+    if (role === "employee") setScopes(["business"]);
+    if (role === "shopper")  setScopes(["personal"]);
   }, [role]);
 
   function toggleScope(s: string) {
     if (role === "employee") return; // employees are always business only
+    if (role === "shopper")  return; // shoppers are always personal only
     setScopes((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]);
   }
 
@@ -143,7 +144,7 @@ export function InviteDialog({ open, onClose, businessCategories = [] }: Props) 
             <div>
               <label className="text-label-md text-on-surface-variant block mb-xs">Rol</label>
               <div className="flex flex-col gap-sm">
-                {(["editor", "viewer", "recorder", "employee"] as const).map((r) => (
+                {(["editor", "viewer", "recorder", "employee", "shopper"] as const).map((r) => (
                   <button
                     key={r}
                     type="button"
@@ -167,7 +168,7 @@ export function InviteDialog({ open, onClose, businessCategories = [] }: Props) 
               <div className="flex gap-sm">
                 {(["personal", "business"] as const).map((s) => {
                   const active = scopes.includes(s);
-                  const disabled = role === "employee" && s === "personal";
+                  const disabled = (role === "employee" && s === "personal") || (role === "shopper" && s === "business");
                   return (
                     <button
                       key={s}
