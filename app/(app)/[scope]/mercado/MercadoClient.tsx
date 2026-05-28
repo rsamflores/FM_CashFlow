@@ -764,8 +764,8 @@ function ManualAddDialog({ listId, onClose }: { listId: string; onClose: () => v
             <span className="text-label-md text-on-surface-variant">Cantidad</span>
             <input
               type="number"
-              step="0.01"
-              min="0"
+              step="1"
+              min="1"
               value={qty}
               onChange={(e) => setQty(e.target.value)}
               className="h-10 px-md rounded-lg bg-surface-container-high text-on-surface text-body-sm outline-none border-none"
@@ -1017,8 +1017,8 @@ function ItemRow({ item, showStoreBadge = false }: { item: ShoppingListItemRow; 
         </div>
         <input
           type="number"
-          step="0.01"
-          min="0"
+          step="1"
+          min="1"
           value={qty}
           onChange={(e) => setQty(e.target.value)}
           onBlur={commitQty}
@@ -1197,8 +1197,8 @@ function ItemEditDialog({ item, onClose }: { item: ShoppingListItemRow; onClose:
             <span className="text-label-md text-on-surface-variant">Cantidad</span>
             <input
               type="number"
-              step="0.01"
-              min="0.01"
+              step="1"
+              min="1"
               value={qty}
               onChange={(e) => setQty(e.target.value)}
               className="h-10 px-md rounded-lg bg-surface-container-high text-on-surface text-body-sm outline-none border-none"
