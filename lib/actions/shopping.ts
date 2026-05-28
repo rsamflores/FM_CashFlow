@@ -90,6 +90,16 @@ const UA =
 const BR_ACCOUNT_ID = "7024";
 const BR_DOMAIN_KEY = "pricesmart_bloomreach_io_es";
 const BR_CATALOG_VIEWS = "pricesmart_bloomreach_io_es:sv";
+const BR_AUTH_KEY = "ev7libhybjg5h1d1";
+
+// Commercetools (CT) configuration for PriceSmart SV pricing
+// Prices come from CT, not from Bloomreach Discovery (which always returns 0)
+const CT_API = "https://api.us-central1.gcp.commercetools.com/pricesmart-ecomm-prod-01";
+const CT_CURRENCY = "USD";
+const CT_COUNTRY = "SV";
+const CT_CHANNEL = "1bad5650-9b56-4490-b3c5-2d50f86c6716"; // vsf-channel for El Salvador
+const CT_VSF_COOKIES =
+  "vsf-locale=es-sv; vsf-currency=USD; vsf-country=sv; vsf-store=SV; vsf-channel=1bad5650-9b56-4490-b3c5-2d50f86c6716";
 
 export async function searchProducts(
   store: "walmart" | "pricesmart",
@@ -204,72 +214,179 @@ async function scrapeWalmart(query: string): Promise<ProductHit[]> {
   return hits;
 }
 
-async function scrapePricesmart(query: string): Promise<ProductHit[]> {
-  // Bloomreach Discovery API — PriceSmart SV catalog
-  // account_id and domain_key extracted from PriceSmart's Nuxt __NUXT__ state.
-  // Note: sale_price is always 0 in this catalog; user adjusts price manually.
+/**
+ * Obtain a short-lived Commercetools anonymous Bearer token by calling
+ * PriceSmart's VSF middleware createCart endpoint.
+ * The token has a 3-hour TTL and grants view_products / view_published_products.
+ */
+async function getPricesmartCTToken(): Promise<string | null> {
+  const ctrl = new AbortController();
+  const tmo = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT_MS);
+  try {
+    const res = await fetch("https://www.pricesmart.com/api/ct/createCart", {
+      method: "POST",
+      headers: {
+        "User-Agent": UA,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Cookie: CT_VSF_COOKIES,
+        Origin: "https://www.pricesmart.com",
+        Referer: "https://www.pricesmart.com/es-sv/",
+      },
+      body: "{}",
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return null;
+
+    // Token is returned as a Set-Cookie header: vsf-commercetools-token={urlencoded JSON}
+    const setCookies = res.headers.getSetCookie?.() ?? [];
+    for (const cookie of setCookies) {
+      const match = cookie.match(/vsf-commercetools-token=([^;]+)/);
+      if (match) {
+        const parsed = JSON.parse(decodeURIComponent(match[1]));
+        return (parsed?.access_token as string) ?? null;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(tmo);
+  }
+}
+
+/**
+ * Batch-fetch SV USD prices for an array of product keys from Commercetools.
+ * Returns a map of { [key]: price_in_usd }.
+ */
+async function fetchCTPrices(
+  pids: string[],
+  token: string,
+): Promise<Record<string, number>> {
+  if (!pids.length) return {};
+
+  // CT where clause: key in ("pid1","pid2",...)
+  const whereClause = `key in (${pids.map((p) => `"${p}"`).join(",")})`;
   const params = new URLSearchParams({
+    where: whereClause,
+    priceCurrency: CT_CURRENCY,
+    priceCountry: CT_COUNTRY,
+    priceChannel: CT_CHANNEL,
+    limit: String(pids.length),
+  });
+
+  const ctrl = new AbortController();
+  const tmo = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${CT_API}/product-projections?${params}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "User-Agent": UA,
+        Accept: "application/json",
+      },
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: any = await res.json();
+    const priceMap: Record<string, number> = {};
+    for (const p of data?.results ?? []) {
+      const key = String(p?.key ?? "");
+      // Selected price is at masterVariant.price (set by the priceCurrency/priceCountry/priceChannel params)
+      const centAmount: number = p?.masterVariant?.price?.value?.centAmount ?? 0;
+      const fractionDigits: number = p?.masterVariant?.price?.value?.fractionDigits ?? 2;
+      if (key && centAmount > 0) {
+        priceMap[key] = centAmount / Math.pow(10, fractionDigits);
+      }
+    }
+    return priceMap;
+  } catch {
+    return {};
+  } finally {
+    clearTimeout(tmo);
+  }
+}
+
+async function scrapePricesmart(query: string): Promise<ProductHit[]> {
+  // ── Step 1: Bloomreach Discovery for SV catalog (names, thumbnails, pids) ──
+  const brParams = new URLSearchParams({
     account_id: BR_ACCOUNT_ID,
     domain_key: BR_DOMAIN_KEY,
+    auth_key: BR_AUTH_KEY,
     catalog_views: BR_CATALOG_VIEWS,
     request_type: "search",
     search_type: "keyword",
     q: query,
-    fl: "pid,title,thumb_image,sale_price,url,brand",
+    fl: "pid,title,thumb_image,url,brand",
     rows: "5",
     url: "https://www.pricesmart.com/es-sv/search",
     ref_url: "https://www.pricesmart.com/es-sv/",
   });
 
-  const url = `https://core.dxpapi.com/api/v1/core/?${params.toString()}`;
-  const ctrl = new AbortController();
-  const tmo = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT_MS);
+  const brUrl = `https://core.dxpapi.com/api/v1/core/?${brParams.toString()}`;
+  const brCtrl = new AbortController();
+  const brTmo = setTimeout(() => brCtrl.abort(), SEARCH_TIMEOUT_MS);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let data: any;
+  let brData: any;
   try {
-    const res = await fetch(url, {
+    const res = await fetch(brUrl, {
       headers: {
         "User-Agent": UA,
         Accept: "application/json",
         "Accept-Language": "es-SV,es;q=0.9",
       },
-      signal: ctrl.signal,
+      signal: brCtrl.signal,
     });
     if (!res.ok) return [];
-    data = await res.json();
+    brData = await res.json();
+  } catch {
+    return [];
   } finally {
-    clearTimeout(tmo);
+    clearTimeout(brTmo);
   }
 
-  const docs: unknown[] = data?.response?.docs;
-  if (!Array.isArray(docs)) return [];
+  const docs: unknown[] = brData?.response?.docs;
+  if (!Array.isArray(docs) || docs.length === 0) return [];
 
-  const hits: ProductHit[] = [];
+  // ── Step 2: Extract pids, names, images from Bloomreach ──
+  type BrHit = { pid: string; name: string; image: string | null };
+  const brHits: BrHit[] = [];
   for (const d of docs.slice(0, 5)) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const doc = d as any;
     const pid = String(doc?.pid ?? "").trim();
     const name = String(doc?.title ?? "").trim();
     if (!pid || !name) continue;
-
-    // Price is always 0 in the catalog — user will edit in the item row
-    const price = Number(doc?.sale_price ?? 0);
-    const image = doc?.thumb_image ? String(doc.thumb_image) : null;
-
-    // Convert product URL to SV format (catalog returns CR URLs)
-    const product_url = `https://www.pricesmart.com/es-sv/p/${pid}`;
-
-    hits.push({
-      store: "pricesmart",
-      external_id: pid,
+    brHits.push({
+      pid,
       name,
-      price,
-      image_url: image,
-      product_url,
+      image: doc?.thumb_image ? String(doc.thumb_image) : null,
     });
   }
-  return hits;
+  if (!brHits.length) return [];
+
+  // ── Step 3: Get CT token + batch-fetch prices ──
+  const pids = brHits.map((h) => h.pid);
+  let priceMap: Record<string, number> = {};
+  try {
+    const token = await getPricesmartCTToken();
+    if (token) {
+      priceMap = await fetchCTPrices(pids, token);
+    }
+  } catch {
+    // Price fetch failed — return hits with 0 price (user can edit)
+  }
+
+  // ── Step 4: Merge ──
+  return brHits.map((hit) => ({
+    store: "pricesmart" as const,
+    external_id: hit.pid,
+    name: hit.name,
+    price: priceMap[hit.pid] ?? 0,
+    image_url: hit.image,
+    product_url: `https://www.pricesmart.com/es-sv/p/${hit.pid}`,
+  }));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -333,12 +333,6 @@ function SearchPanel({ listId }: { listId: string }) {
         </button>
       </div>
 
-      {searchStore === "pricesmart" && searched && !loading && (
-        <p className="text-label-md text-on-surface-variant">
-          💡 Los precios de PriceSmart no están disponibles en el catálogo. Edítalos manualmente en la lista.
-        </p>
-      )}
-
       {searched && results.length === 0 && !loading && (
         <p className="text-label-md text-on-surface-variant">
           Sin resultados. Usa &quot;Añadir manual&quot; o intenta otra búsqueda.
