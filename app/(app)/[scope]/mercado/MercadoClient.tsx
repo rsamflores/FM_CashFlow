@@ -213,29 +213,37 @@ function BudgetCard({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Search panel — Walmart lookup + manual add
+// Search panel — Walmart + PriceSmart lookup + manual add
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SearchPanel({ listId }: { listId: string }) {
   const [query, setQuery] = useState("");
+  const [searchStore, setSearchStore] = useState<"walmart" | "pricesmart">("walmart");
   const [results, setResults] = useState<ProductHit[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [pending, startTransition] = useTransition();
   const [manualOpen, setManualOpen] = useState(false);
 
-  async function runSearch() {
+  async function runSearch(store: "walmart" | "pricesmart" = searchStore) {
     const q = query.trim();
     if (!q) return;
     setLoading(true);
     setSearched(false);
+    setResults([]);
     try {
-      const hits = await searchProducts("walmart", q);
+      const hits = await searchProducts(store, q);
       setResults(hits);
       setSearched(true);
     } finally {
       setLoading(false);
     }
+  }
+
+  function switchStore(store: "walmart" | "pricesmart") {
+    setSearchStore(store);
+    setResults([]);
+    setSearched(false);
   }
 
   function addHit(h: ProductHit) {
@@ -255,11 +263,12 @@ function SearchPanel({ listId }: { listId: string }) {
 
   return (
     <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low p-md flex flex-col gap-sm">
+      {/* Store toggle + manual add */}
       <div className="flex items-center gap-sm flex-wrap">
         <span className="material-symbols-outlined" style={{ fontSize: 18, color: "var(--color-primary)" }}>
           search
         </span>
-        <h3 className="text-body-sm font-bold text-on-surface flex-1">Buscar en Walmart SV</h3>
+        <h3 className="text-body-sm font-bold text-on-surface flex-1">Buscar productos</h3>
         <button
           type="button"
           onClick={() => setManualOpen(true)}
@@ -268,18 +277,37 @@ function SearchPanel({ listId }: { listId: string }) {
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
           Añadir manual
         </button>
-        <a
-          href={`https://www.pricesmart.com/site/sv/es/buscar?q=${encodeURIComponent(query || "")}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="h-9 px-md rounded-full bg-surface-container-high text-on-surface text-body-sm font-bold flex items-center gap-xs"
-          title="Abrir búsqueda en PriceSmart.com (entrada manual)"
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>open_in_new</span>
-          Buscar en PriceSmart
-        </a>
       </div>
 
+      {/* Store selector */}
+      <div className="flex gap-xs">
+        <button
+          type="button"
+          onClick={() => switchStore("walmart")}
+          className="h-8 px-md rounded-full text-body-sm font-bold transition-colors flex items-center gap-xs"
+          style={{
+            background: searchStore === "walmart" ? STORE_COLOR.walmart : "var(--color-surface-container-high)",
+            color: searchStore === "walmart" ? "#fff" : "var(--color-on-surface-variant)",
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>shopping_cart</span>
+          Walmart
+        </button>
+        <button
+          type="button"
+          onClick={() => switchStore("pricesmart")}
+          className="h-8 px-md rounded-full text-body-sm font-bold transition-colors flex items-center gap-xs"
+          style={{
+            background: searchStore === "pricesmart" ? STORE_COLOR.pricesmart : "var(--color-surface-container-high)",
+            color: searchStore === "pricesmart" ? "#fff" : "var(--color-on-surface-variant)",
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>store</span>
+          PriceSmart
+        </button>
+      </div>
+
+      {/* Search input */}
       <div className="flex items-center gap-sm">
         <input
           type="text"
@@ -291,18 +319,25 @@ function SearchPanel({ listId }: { listId: string }) {
               runSearch();
             }
           }}
-          placeholder="leche, huevos, papel higiénico…"
+          placeholder={searchStore === "walmart" ? "leche, huevos, papel higiénico…" : "busca en PriceSmart SV…"}
           className="flex-1 h-10 px-md rounded-lg bg-surface-container text-on-surface text-body-sm focus:ring-2 focus:ring-primary-container outline-none border-none"
         />
         <button
           type="button"
           disabled={loading}
-          onClick={runSearch}
-          className="h-10 px-md rounded-full bg-primary-container text-on-primary-container font-bold text-body-sm disabled:opacity-50"
+          onClick={() => runSearch()}
+          className="h-10 px-md rounded-full font-bold text-body-sm disabled:opacity-50 text-white"
+          style={{ background: STORE_COLOR[searchStore] }}
         >
           {loading ? "Buscando…" : "Buscar"}
         </button>
       </div>
+
+      {searchStore === "pricesmart" && searched && !loading && (
+        <p className="text-label-md text-on-surface-variant">
+          💡 Los precios de PriceSmart no están disponibles en el catálogo. Edítalos manualmente en la lista.
+        </p>
+      )}
 
       {searched && results.length === 0 && !loading && (
         <p className="text-label-md text-on-surface-variant">
@@ -337,9 +372,13 @@ function SearchPanel({ listId }: { listId: string }) {
               )}
               <div className="flex-1 min-w-0">
                 <p className="text-label-md text-on-surface line-clamp-2">{h.name}</p>
-                <p className="text-body-sm font-bold mt-xs" style={{ color: STORE_COLOR.walmart }}>
-                  {formatCurrency(h.price)}
-                </p>
+                {h.price > 0 ? (
+                  <p className="text-body-sm font-bold mt-xs" style={{ color: STORE_COLOR[h.store] }}>
+                    {formatCurrency(h.price)}
+                  </p>
+                ) : (
+                  <p className="text-label-md text-on-surface-variant mt-xs italic">Editar precio</p>
+                )}
                 <p className="text-label-md text-on-surface-variant mt-xs">+ Añadir</p>
               </div>
             </button>

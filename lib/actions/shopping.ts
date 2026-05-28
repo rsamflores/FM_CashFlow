@@ -76,7 +76,7 @@ const STORE_BUDGET_CATEGORY: Record<"walmart" | "pricesmart", string> = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Búsqueda — Walmart SV (VTEX public API) + PriceSmart (manual-only)
+// Búsqueda — Walmart SV (VTEX) + PriceSmart (Bloomreach Discovery)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CACHE_TTL_HOURS = 24;
@@ -84,6 +84,12 @@ const SEARCH_TIMEOUT_MS = 6000;
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+// Bloomreach Discovery credentials for PriceSmart SV
+// (extracted from the Nuxt __NUXT__ state on pricesmart.com/es-sv)
+const BR_ACCOUNT_ID = "7024";
+const BR_DOMAIN_KEY = "pricesmart_bloomreach_io_es";
+const BR_CATALOG_VIEWS = "pricesmart_bloomreach_io_es:sv";
 
 export async function searchProducts(
   store: "walmart" | "pricesmart",
@@ -115,10 +121,7 @@ export async function searchProducts(
     if (store === "walmart") {
       hits = await scrapeWalmart(q);
     } else {
-      // PriceSmart: su sitio es 100% SPA y los productos no se entregan en el HTML.
-      // Sin API pública conocida ni autenticación, no se puede listar productos.
-      // La UI mostrará un fallback con un enlace a la búsqueda + entrada manual.
-      hits = [];
+      hits = await scrapePricesmart(q);
     }
   } catch (err) {
     // Cualquier error → vacío; el UI cae a entrada manual
@@ -196,6 +199,74 @@ async function scrapeWalmart(query: string): Promise<ProductHit[]> {
       price,
       image_url: image,
       product_url: String(prod?.link ?? ""),
+    });
+  }
+  return hits;
+}
+
+async function scrapePricesmart(query: string): Promise<ProductHit[]> {
+  // Bloomreach Discovery API — PriceSmart SV catalog
+  // account_id and domain_key extracted from PriceSmart's Nuxt __NUXT__ state.
+  // Note: sale_price is always 0 in this catalog; user adjusts price manually.
+  const params = new URLSearchParams({
+    account_id: BR_ACCOUNT_ID,
+    domain_key: BR_DOMAIN_KEY,
+    catalog_views: BR_CATALOG_VIEWS,
+    request_type: "search",
+    search_type: "keyword",
+    q: query,
+    fl: "pid,title,thumb_image,sale_price,url,brand",
+    rows: "5",
+    url: "https://www.pricesmart.com/es-sv/search",
+    ref_url: "https://www.pricesmart.com/es-sv/",
+  });
+
+  const url = `https://core.dxpapi.com/api/v1/core/?${params.toString()}`;
+  const ctrl = new AbortController();
+  const tmo = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT_MS);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let data: any;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": UA,
+        Accept: "application/json",
+        "Accept-Language": "es-SV,es;q=0.9",
+      },
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return [];
+    data = await res.json();
+  } finally {
+    clearTimeout(tmo);
+  }
+
+  const docs: unknown[] = data?.response?.docs;
+  if (!Array.isArray(docs)) return [];
+
+  const hits: ProductHit[] = [];
+  for (const d of docs.slice(0, 5)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const doc = d as any;
+    const pid = String(doc?.pid ?? "").trim();
+    const name = String(doc?.title ?? "").trim();
+    if (!pid || !name) continue;
+
+    // Price is always 0 in the catalog — user will edit in the item row
+    const price = Number(doc?.sale_price ?? 0);
+    const image = doc?.thumb_image ? String(doc.thumb_image) : null;
+
+    // Convert product URL to SV format (catalog returns CR URLs)
+    const product_url = `https://www.pricesmart.com/es-sv/p/${pid}`;
+
+    hits.push({
+      store: "pricesmart",
+      external_id: pid,
+      name,
+      price,
+      image_url: image,
+      product_url,
     });
   }
   return hits;
