@@ -38,7 +38,7 @@ const STORE_LABEL: Record<Store, string> = {
 
 const STORE_COLOR: Record<Store, string> = {
   walmart: "#0071ce",
-  pricesmart: "#e30613",
+  pricesmart: "#ef4123",
   manual: "var(--color-tertiary)",
 };
 
