@@ -248,45 +248,73 @@ async function fetchPricesmartByUrl(url: URL): Promise<ProductHit | { error: str
 
   if (!pid) return { error: "No se encontró el identificador del producto en el enlace" };
 
-  // Bloomreach: buscar por PID como keyword para obtener nombre e imagen
-  const brParams = new URLSearchParams({
-    account_id: BR_ACCOUNT_ID,
-    domain_key: BR_DOMAIN_KEY,
-    auth_key: BR_AUTH_KEY,
-    catalog_views: BR_CATALOG_VIEWS,
-    request_type: "search",
-    search_type: "keyword",
-    q: pid,
-    fl: "pid,title,thumb_image",
-    rows: "3",
-    url: "https://www.pricesmart.com/es-sv/",
-    ref_url: "https://www.pricesmart.com/es-sv/",
-  });
+  // Extract a human-readable name from the URL slug as fallback.
+  // e.g. /es-sv/producto/mccain-papas-a-la-francesa-de-corte-recto-2-5-kg-5-5-lb-28239/28239
+  //   → slug segment: "mccain-papas-a-la-francesa-de-corte-recto-2-5-kg-5-5-lb-28239"
+  //   → strip trailing -pid: "mccain-papas-a-la-francesa-de-corte-recto-2-5-kg-5-5-lb"
+  //   → capitalize: "Mccain Papas A La Francesa De Corte Recto 2 5 Kg 5 5 Lb"
+  let slugName = "";
+  if (parts.length >= 2) {
+    const slugSeg = parts[parts.length - 2];
+    const slugWithoutPid = slugSeg.replace(new RegExp(`-${pid}$`), "");
+    slugName = slugWithoutPid
+      .split("-")
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+  }
 
-  const brCtrl = new AbortController();
-  const brTmo = setTimeout(() => brCtrl.abort(), SEARCH_TIMEOUT_MS);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let name = "";
-  let image: string | null = null;
-  try {
-    const res = await fetch(`https://core.dxpapi.com/api/v1/core/?${brParams}`, {
-      headers: { "User-Agent": UA, Accept: "application/json" },
-      signal: brCtrl.signal,
+  // Helper: one Bloomreach keyword search, returns { name, image } or null
+  async function brLookup(q: string): Promise<{ name: string; image: string | null } | null> {
+    const params = new URLSearchParams({
+      account_id: BR_ACCOUNT_ID,
+      domain_key: BR_DOMAIN_KEY,
+      auth_key: BR_AUTH_KEY,
+      catalog_views: BR_CATALOG_VIEWS,
+      request_type: "search",
+      search_type: "keyword",
+      q,
+      fl: "pid,title,thumb_image",
+      rows: "5",
+      url: "https://www.pricesmart.com/es-sv/",
+      ref_url: "https://www.pricesmart.com/es-sv/",
     });
-    if (res.ok) {
+    const ctrl = new AbortController();
+    const tmo = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(`https://core.dxpapi.com/api/v1/core/?${params}`, {
+        headers: { "User-Agent": UA, Accept: "application/json" },
+        signal: ctrl.signal,
+      });
+      if (!res.ok) return null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data: any = await res.json();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const doc = (data?.response?.docs as any[])?.find((d: any) => String(d?.pid) === pid);
-      if (doc) {
-        name = String(doc.title ?? "").trim();
-        image = doc.thumb_image ? String(doc.thumb_image) : null;
-      }
+      const docs: any[] = data?.response?.docs ?? [];
+      if (!docs.length) return null;
+      // Prefer exact pid match; fall back to first result
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const doc = docs.find((d: any) => String(d?.pid) === pid) ?? docs[0];
+      const name = String(doc?.title ?? "").trim();
+      const image: string | null = doc?.thumb_image ? String(doc.thumb_image) : null;
+      return name ? { name, image } : null;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(tmo);
     }
-  } catch { /* fallback: name stays empty, price still fetched */ }
-  finally { clearTimeout(brTmo); }
+  }
 
-  if (!name) name = `Producto PriceSmart #${pid}`;
+  // Try Bloomreach by PID first; if not found, try by slug-derived keywords
+  let brResult = await brLookup(pid);
+  if (!brResult && slugName) {
+    // Use first 4 significant words of the slug name for a keyword search
+    const keywords = slugName.split(" ").slice(0, 4).join(" ");
+    brResult = await brLookup(keywords);
+  }
+
+  let name = brResult?.name ?? (slugName || `Producto PriceSmart #${pid}`);
+  let image: string | null = brResult?.image ?? null;
 
   // CT: precio en USD para El Salvador
   let price = 0;
