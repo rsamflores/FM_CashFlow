@@ -178,51 +178,66 @@ export async function fetchProductFromUrl(
   return { error: "Solo se admiten enlaces de Walmart SV (walmart.com.sv) y PriceSmart (pricesmart.com)" };
 }
 
-/** Walmart: /[slug]/p  → VTEX catalog search by slug */
+/**
+ * Walmart SV (VTEX): /[slug]/p
+ *
+ * Tries two VTEX catalog endpoints in order:
+ *   1. fq=linkId:{slug}   — exact URL slug lookup (most reliable)
+ *   2. Free-text search on the slug   — fallback for short slugs
+ */
 async function fetchWalmartByUrl(url: URL): Promise<ProductHit | { error: string }> {
-  // path: /pollo-empanizado-460-gr-pollo-indio-8/p  → slug before /p
   const parts = url.pathname.replace(/\/$/, "").split("/").filter(Boolean);
   const pIdx = parts.lastIndexOf("p");
   const slug = pIdx > 0 ? parts[pIdx - 1] : parts[parts.length - 1];
   if (!slug) return { error: "No se encontró el identificador del producto en el enlace" };
 
-  const apiUrl = `https://www.walmart.com.sv/api/catalog_system/pub/products/search/${encodeURIComponent(slug)}`;
-  const ctrl = new AbortController();
-  const tmo = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(apiUrl, {
-      headers: { "User-Agent": UA, Accept: "application/json" },
-      signal: ctrl.signal,
-    });
-    if (!res.ok) return { error: "No se pudo obtener el producto de Walmart" };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data: any[] = await res.json();
-    if (!Array.isArray(data) || data.length === 0)
-      return { error: "Producto no encontrado en Walmart SV" };
+  const base = "https://www.walmart.com.sv/api/catalog_system/pub/products/search";
+  // Try linkId filter first, then free-text fallback
+  const candidates = [
+    `${base}?fq=linkId:${encodeURIComponent(slug)}`,
+    `${base}/${encodeURIComponent(slug)}`,
+  ];
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const p = data[0] as any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function parseProduct(p: any, fallbackUrl: string): ProductHit {
     const id = String(p?.productId ?? "");
     const name = String(p?.productName ?? "").trim();
-    if (!name) return { error: "Producto no encontrado" };
-
     const item0 = Array.isArray(p?.items) ? p.items[0] : null;
     const seller0 = Array.isArray(item0?.sellers) ? item0.sellers[0] : null;
     const offer = seller0?.commertialOffer;
     let price = 0;
     if (offer?.Price > 0) price = Number(offer.Price);
     else if (offer?.ListPrice > 0) price = Number(offer.ListPrice);
-
     const imgs = Array.isArray(item0?.images) ? item0.images : [];
     const image: string | null = imgs[0]?.imageUrl ? String(imgs[0].imageUrl) : null;
-    const link = String(p?.link ?? url.href);
-
+    const link = String(p?.link ?? fallbackUrl);
     return { store: "walmart", external_id: id, name, price, image_url: image, product_url: link };
-  } catch {
-    return { error: "Error al obtener el producto de Walmart" };
-  } finally {
-    clearTimeout(tmo);
   }
+
+  for (const apiUrl of candidates) {
+    const ctrl = new AbortController();
+    const tmo = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(apiUrl, {
+        headers: { "User-Agent": UA, Accept: "application/json" },
+        signal: ctrl.signal,
+      });
+      clearTimeout(tmo);
+      if (!res.ok) continue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data: any[] = await res.json();
+      if (!Array.isArray(data) || data.length === 0) continue;
+      const p = data[0];
+      const name = String(p?.productName ?? "").trim();
+      if (!name) continue;
+      return parseProduct(p, url.href);
+    } catch {
+      clearTimeout(tmo);
+      continue;
+    }
+  }
+
+  return { error: "Producto no encontrado en Walmart SV" };
 }
 
 /**
