@@ -58,6 +58,73 @@ const STORE_ICON: Record<Store, string> = {
   manual:      "edit",
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Grocery category classifier (client-side keyword matching, no API needed)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const GROCERY_CATEGORIES: { label: string; icon: string; keywords: RegExp[] }[] = [
+  {
+    label: "Frutas y Verduras", icon: "🥦",
+    keywords: [/\b(manzana|pera|naranja|mandarina|uvas?|fresas?|melón|melon|sandía|sandia|piña|pina|mango|papaya|aguacate|plátanos?|platanos?|banano|banana|tomates?|lechuga|espinaca|zanahorias?|cebolla|ajo|papas?|yuca|brócoli|brocoli|coliflor|chile|pepino|ejotes?|elotes?|maíz|maiz|apio|rábano|rabano|betabel|remolacha|cilantro|perejil|nopal|champiñones?|hongos?|chayote|güisquil)\b/i],
+  },
+  {
+    label: "Carnes y Mariscos", icon: "🥩",
+    keywords: [/\b(pollo|pechuga|muslo|alas?|filete|carne\s+de\s+res|carne\s+molida|bistec|costilla|chuleta|lomo|cerdo|puerco|chorizo|salchicha|jamón|jamon|tocino|bacon|mortadela|salami|pepperoni|mariscos?|camarones?|langosta|cangrejo|pescado|salmón|salmon|tilapia|mojarra|bagre|atún|tuna|sardinas?|calamares?|pulpo)\b/i],
+  },
+  {
+    label: "Lácteos y Huevos", icon: "🥛",
+    keywords: [/\b(leche|queso|yogur|yogurt|crema\s+(ácida|acida|de\s+leche)|mantequilla|margarina|butter|huevos?)\b/i],
+  },
+  {
+    label: "Pan y Tortillas", icon: "🍞",
+    keywords: [/\b(pan\b|tortillas?|baguette|bollos?|croissant|brioche|pita|wraps?|chapatas?)\b/i],
+  },
+  {
+    label: "Granos y Pasta", icon: "🌾",
+    keywords: [/\b(arroz|frijoles?|lentejas?|garbanzos?|habas?|soya|harina|pasta\b|espagueti|spaghetti|fideos?|macarrones?|cereal|avena|granola|quinoa|trigo|cebada)\b/i],
+  },
+  {
+    label: "Enlatados y Conservas", icon: "🥫",
+    keywords: [/\b(atún\s+en\s+lata|atun\s+en\s+lata|sardinas?\s+en|spam|conservas?|enlatados?|frijoles?\s+(refritos|negros|rojos)\s+en\s+lata|pasta\s+de\s+tomate|tomate\s+de\s+lata)\b/i],
+  },
+  {
+    label: "Condimentos y Salsas", icon: "🧂",
+    keywords: [/\b(sal\b|sal\s+(de|marina)|pimienta|azúcar|azucar|aceite\b|vinagre|salsa\b|salsas?|ketchup|mayonesa|mostaza|soya\b|worcestershire|tabasco|picante|sazonador|condimento|especias?|canela|orégano|oregano|comino|consomé|consome|sopita|maggi|adobo|recado|sofrito|crema\s+(de\s+coco|de\s+cacahuate))\b/i],
+  },
+  {
+    label: "Snacks y Dulces", icon: "🍿",
+    keywords: [/\b(papas\s+fritas|platanitos|frituras?|maní|mani|nueces?|almendras?|pistaches?|chocolates?|dulces?|caramelos?|gomitas?|galletas?\b|barritas?|chips\b|snacks?|palomitas?|popcorn|nachos|doritos|ruffles|cheetos)\b/i],
+  },
+  {
+    label: "Bebidas", icon: "🧃",
+    keywords: [/\b(jugo|refresco|soda\b|gaseosa|agua\s+(de|con|mineral|pura)?|café\b|cafe\b|tés?|te\b|bebidas?|néctar|nectar|limonada|horchata|energizante|cerveza|vino\b|licor|whisky|ron\b|vodka|leche\s+de\s+(soya|almendra|coco))\b/i],
+  },
+  {
+    label: "Congelados", icon: "🧊",
+    keywords: [/\b(congelados?|helados?|ice\s+cream|frozen|nuggets?|pizza\s+congelada|waffles?|fries\b|papas\s+a\s+la\s+francesa)\b/i],
+  },
+  {
+    label: "Limpieza del Hogar", icon: "🧹",
+    keywords: [/\b(detergente|suavizante|cloro|blanqueador|limpiador|desinfectante|fabuloso|ajax\b|axion|lava\s*trastes?|lavaplatos|escoba|trapeador|mopa\b|papel\s+toalla|bolsa(s)?\s+(de\s+)?basura|esponjas?|fibra\s+(de\s+acero)?|trapos?|jergas?|guantes?\s+de\s+hule|plumeros?|ambientador|aromatizante)\b/i],
+  },
+  {
+    label: "Higiene Personal", icon: "🧴",
+    keywords: [/\b(shampoo|champú|champu|acondicionador|jabón\s+(de\s+baño|corporal|líquido)?|jabon\b|pasta\s+dental|cepillo\s+dental|hilo\s+dental|enjuague\s+bucal|desodorante|antitranspirante|papel\s+higiénico|papel\s+higienico|servilletas?|toallas?\s+(húmedas|higienicas|sanitar)|pañales?|panales?|tampones?|toallitas?|rasuradoras?|rastrillos?|espuma\s+de\s+afeitar|loción|locion|crema\s+corporal|perfume|colonia\b|bloqueador|protector\s+solar)\b/i],
+  },
+  { label: "Otros", icon: "📦", keywords: [] },
+];
+
+function classifyItem(name: string): { label: string; icon: string } {
+  for (const cat of GROCERY_CATEGORIES.slice(0, -1)) {
+    if (cat.keywords.some((re) => re.test(name))) {
+      return { label: cat.label, icon: cat.icon };
+    }
+  }
+  return { label: "Otros", icon: "📦" };
+}
+
+type ViewMode = "store" | "category";
+
 export function MercadoClient({
   list,
   items,
@@ -68,6 +135,7 @@ export function MercadoClient({
   history,
 }: Props) {
   const [purchaseOpen, setPurchaseOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("store");
 
   // Totals per store
   const sum = (s: Store) =>
@@ -110,8 +178,36 @@ export function MercadoClient({
       {/* Search / add panel */}
       <SearchPanel listId={list.id} />
 
-      {/* Items grouped by store */}
-      <ItemGroups items={items} />
+      {/* View mode toggle + items */}
+      {items.length > 0 && (
+        <div className="flex gap-xs">
+          <button
+            type="button"
+            onClick={() => setViewMode("store")}
+            className="h-8 px-md rounded-full text-body-sm font-bold flex items-center gap-xs transition-colors"
+            style={{
+              background: viewMode === "store" ? "var(--color-primary-container)" : "var(--color-surface-container-high)",
+              color: viewMode === "store" ? "var(--color-on-primary-container)" : "var(--color-on-surface-variant)",
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>store</span>
+            Por tienda
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("category")}
+            className="h-8 px-md rounded-full text-body-sm font-bold flex items-center gap-xs transition-colors"
+            style={{
+              background: viewMode === "category" ? "var(--color-primary-container)" : "var(--color-surface-container-high)",
+              color: viewMode === "category" ? "var(--color-on-primary-container)" : "var(--color-on-surface-variant)",
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>category</span>
+            Por tipo
+          </button>
+        </div>
+      )}
+      <ItemGroups items={items} viewMode={viewMode} />
 
       {/* Suggestions */}
       {suggestions.length > 0 && (
@@ -592,10 +688,10 @@ function ManualAddDialog({ listId, onClose }: { listId: string; onClose: () => v
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Items grouped by store
+// Items grouped by store or by grocery category
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ItemGroups({ items }: { items: ShoppingListItemRow[] }) {
+function ItemGroups({ items, viewMode }: { items: ShoppingListItemRow[]; viewMode: ViewMode }) {
   if (items.length === 0) {
     return (
       <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low p-xl text-center">
@@ -609,6 +705,53 @@ function ItemGroups({ items }: { items: ShoppingListItemRow[] }) {
     );
   }
 
+  if (viewMode === "category") {
+    // Group items by grocery category, preserving the canonical category order
+    const byCategory = new Map<string, { icon: string; items: ShoppingListItemRow[] }>();
+    for (const item of items) {
+      const { label, icon } = classifyItem(item.name);
+      if (!byCategory.has(label)) byCategory.set(label, { icon, items: [] });
+      byCategory.get(label)!.items.push(item);
+    }
+    // Sort groups following GROCERY_CATEGORIES order, then alphabetically for unknowns
+    const catOrder = GROCERY_CATEGORIES.map((c) => c.label);
+    const groups = [...byCategory.entries()].sort(
+      ([a], [b]) => {
+        const ia = catOrder.indexOf(a);
+        const ib = catOrder.indexOf(b);
+        if (ia !== -1 && ib !== -1) return ia - ib;
+        if (ia !== -1) return -1;
+        if (ib !== -1) return 1;
+        return a.localeCompare(b);
+      },
+    );
+
+    return (
+      <div className="flex flex-col gap-md">
+        {groups.map(([label, { icon, items: group }]) => {
+          const subtotal = group.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0);
+          return (
+            <div key={label} className="rounded-2xl border border-outline-variant/10 bg-surface-container-low overflow-hidden">
+              <div className="px-lg py-sm border-b border-outline-variant/10 flex items-center gap-sm bg-surface-container">
+                <span style={{ fontSize: 18 }}>{icon}</span>
+                <h3 className="text-body-sm font-bold text-on-surface flex-1">
+                  {label} ({group.length})
+                </h3>
+                <span className="text-body-sm font-bold text-on-surface">{formatCurrency(subtotal)}</span>
+              </div>
+              <ul className="divide-y divide-outline-variant/10">
+                {group.map((it) => (
+                  <ItemRow key={it.id} item={it} showStoreBadge />
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Default: group by store
   const stores: Store[] = ["walmart", "pricesmart", "agromercado", "dollarcity", "manual"];
   return (
     <div className="flex flex-col gap-md">
@@ -642,7 +785,7 @@ function ItemGroups({ items }: { items: ShoppingListItemRow[] }) {
   );
 }
 
-function ItemRow({ item }: { item: ShoppingListItemRow }) {
+function ItemRow({ item, showStoreBadge = false }: { item: ShoppingListItemRow; showStoreBadge?: boolean }) {
   const [qty, setQty] = useState(String(item.quantity));
   const [price, setPrice] = useState(String(item.unit_price));
   const [editOpen, setEditOpen] = useState(false);
@@ -714,7 +857,18 @@ function ItemRow({ item }: { item: ShoppingListItemRow }) {
           >
             {item.name}
           </p>
-          <p className="text-label-md text-on-surface-variant">{formatCurrency(subtotal)}</p>
+          <p className="text-label-md text-on-surface-variant flex items-center gap-xs">
+            {formatCurrency(subtotal)}
+            {showStoreBadge && (
+              <span
+                className="flex items-center gap-xs px-xs rounded-full"
+                style={{ background: STORE_COLOR[item.store] + "20", color: STORE_COLOR[item.store] }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 10 }}>{STORE_ICON[item.store]}</span>
+                <span style={{ fontSize: 10 }}>{STORE_LABEL[item.store]}</span>
+              </span>
+            )}
+          </p>
         </div>
         <input
           type="number"
