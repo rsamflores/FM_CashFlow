@@ -157,7 +157,7 @@ export async function searchProducts(
 async function scrapeWalmart(query: string): Promise<ProductHit[]> {
   // VTEX public catalog API — entrega JSON limpio sin autenticación
   const url =
-    `https://www.walmart.com.sv/api/catalog_system/pub/products/search/${encodeURIComponent(query)}?_from=0&_to=4`;
+    `https://www.walmart.com.sv/api/catalog_system/pub/products/search/${encodeURIComponent(query)}?_from=0&_to=19`;
 
   const ctrl = new AbortController();
   const tmo = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT_MS);
@@ -182,7 +182,7 @@ async function scrapeWalmart(query: string): Promise<ProductHit[]> {
 
   // Mapeo defensivo: el shape de VTEX puede traer items sin precio o sin imagen
   const hits: ProductHit[] = [];
-  for (const p of raw.slice(0, 5)) {
+  for (const p of raw) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const prod = p as any;
     const id = String(prod?.productId ?? "");
@@ -272,7 +272,7 @@ async function fetchCTPrices(
     priceCurrency: CT_CURRENCY,
     priceCountry: CT_COUNTRY,
     priceChannel: CT_CHANNEL,
-    limit: String(pids.length),
+    limit: String(Math.min(pids.length, 20)),
   });
 
   const ctrl = new AbortController();
@@ -318,7 +318,7 @@ async function scrapePricesmart(query: string): Promise<ProductHit[]> {
     search_type: "keyword",
     q: query,
     fl: "pid,title,thumb_image,url,brand",
-    rows: "5",
+    rows: "20",
     url: "https://www.pricesmart.com/es-sv/search",
     ref_url: "https://www.pricesmart.com/es-sv/",
   });
@@ -352,7 +352,7 @@ async function scrapePricesmart(query: string): Promise<ProductHit[]> {
   // ── Step 2: Extract pids, names, images from Bloomreach ──
   type BrHit = { pid: string; name: string; image: string | null };
   const brHits: BrHit[] = [];
-  for (const d of docs.slice(0, 5)) {
+  for (const d of docs) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const doc = d as any;
     const pid = String(doc?.pid ?? "").trim();
