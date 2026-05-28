@@ -264,11 +264,19 @@ async function fetchPricesmartByUrl(url: URL): Promise<ProductHit | { error: str
       .join(" ");
   }
 
-  // ── Step 1: Bloomreach exact-filter by pid field (fq=pid:X) ──────────────
-  // This is more reliable than keyword search because it queries the indexed
-  // field directly — the numeric PID doesn't appear in titles so keyword fails.
-  async function brByPid(): Promise<{ name: string; image: string | null } | null> {
-    const params = new URLSearchParams({
+  // ── Name: always from URL slug — guaranteed correct ──────────────────────
+  // Bloomreach keyword search can return unrelated products when PID isn't
+  // indexed under that number. The slug is the only fully reliable source.
+  const name = slugName || `Producto PriceSmart #${pid}`;
+
+  // ── Image: Bloomreach fq=pid (only if pid matches), then og:image ─────────
+  // We NEVER use a Bloomreach result that doesn't match the target PID —
+  // that's what caused wrong products to appear.
+  let image: string | null = null;
+
+  // 1. Bloomreach exact-filter: fq=pid:X — only accept if returned pid matches
+  try {
+    const brParams = new URLSearchParams({
       account_id: BR_ACCOUNT_ID,
       domain_key: BR_DOMAIN_KEY,
       auth_key: BR_AUTH_KEY,
@@ -277,7 +285,7 @@ async function fetchPricesmartByUrl(url: URL): Promise<ProductHit | { error: str
       search_type: "keyword",
       q: "*",
       fq: `pid:${pid}`,
-      fl: "pid,title,thumb_image",
+      fl: "pid,thumb_image",
       rows: "1",
       url: "https://www.pricesmart.com/es-sv/",
       ref_url: "https://www.pricesmart.com/es-sv/",
@@ -285,83 +293,25 @@ async function fetchPricesmartByUrl(url: URL): Promise<ProductHit | { error: str
     const ctrl = new AbortController();
     const tmo = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT_MS);
     try {
-      const res = await fetch(`https://core.dxpapi.com/api/v1/core/?${params}`, {
+      const res = await fetch(`https://core.dxpapi.com/api/v1/core/?${brParams}`, {
         headers: { "User-Agent": UA, Accept: "application/json" },
         signal: ctrl.signal,
       });
-      if (!res.ok) return null;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data: any = await res.json();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const docs: any[] = data?.response?.docs ?? [];
-      if (!docs.length) return null;
-      const doc = docs[0];
-      const name = String(doc?.title ?? "").trim();
-      const image: string | null = doc?.thumb_image ? String(doc.thumb_image) : null;
-      return name ? { name, image } : null;
-    } catch { return null; }
-    finally { clearTimeout(tmo); }
-  }
-
-  // ── Step 2: Bloomreach keyword search with slug-derived terms ─────────────
-  async function brByKeywords(kw: string): Promise<{ name: string; image: string | null } | null> {
-    const params = new URLSearchParams({
-      account_id: BR_ACCOUNT_ID,
-      domain_key: BR_DOMAIN_KEY,
-      auth_key: BR_AUTH_KEY,
-      catalog_views: BR_CATALOG_VIEWS,
-      request_type: "search",
-      search_type: "keyword",
-      q: kw,
-      fl: "pid,title,thumb_image",
-      rows: "5",
-      url: "https://www.pricesmart.com/es-sv/",
-      ref_url: "https://www.pricesmart.com/es-sv/",
-    });
-    const ctrl = new AbortController();
-    const tmo = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT_MS);
-    try {
-      const res = await fetch(`https://core.dxpapi.com/api/v1/core/?${params}`, {
-        headers: { "User-Agent": UA, Accept: "application/json" },
-        signal: ctrl.signal,
-      });
-      if (!res.ok) return null;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data: any = await res.json();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const docs: any[] = data?.response?.docs ?? [];
-      if (!docs.length) return null;
-      // Prefer pid match, then first doc that has an image, then docs[0]
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const doc =
-        docs.find((d: any) => String(d?.pid) === pid) ??
+      if (res.ok) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        docs.find((d: any) => d?.thumb_image) ??
-        docs[0];
-      const name = String(doc?.title ?? "").trim();
-      const image: string | null = doc?.thumb_image ? String(doc.thumb_image) : null;
-      return name ? { name, image } : null;
-    } catch { return null; }
-    finally { clearTimeout(tmo); }
-  }
+        const data: any = await res.json();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const docs: any[] = data?.response?.docs ?? [];
+        // Only use the result if its pid field actually matches — never accept
+        // a result from a different product
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const doc = docs.find((d: any) => String(d?.pid) === pid);
+        if (doc?.thumb_image) image = String(doc.thumb_image);
+      }
+    } finally { clearTimeout(tmo); }
+  } catch { /* image stays null */ }
 
-  let brResult = await brByPid();
-  if (!brResult || !brResult.image) {
-    // Keyword fallback using first 4 slug words (lowercase for better matching)
-    const slugWords = slugName.toLowerCase().split(" ").filter(Boolean).slice(0, 4).join(" ");
-    if (slugWords) {
-      const kw = await brByKeywords(slugWords);
-      if (!brResult) brResult = kw;
-      else if (!brResult.image && kw?.image) brResult = { ...brResult, image: kw.image };
-    }
-  }
-
-  let name = brResult?.name ?? (slugName || `Producto PriceSmart #${pid}`);
-  let image: string | null = brResult?.image ?? null;
-
-  // ── Step 3: og:image from the product page HTML ───────────────────────────
-  // PriceSmart uses Nuxt 2 SSR — og:image is server-rendered in <head>.
-  // We fetch the page and search the first 20 KB for the meta tag.
+  // 2. og:image from the product page HTML (Nuxt SSR renders it in <head>)
   if (!image) {
     const ogCtrl = new AbortController();
     const ogTmo = setTimeout(() => ogCtrl.abort(), SEARCH_TIMEOUT_MS);
@@ -375,12 +325,12 @@ async function fetchPricesmartByUrl(url: URL): Promise<ProductHit | { error: str
         signal: ogCtrl.signal,
       });
       if (pageRes.ok) {
-        // Read up to 20 KB — enough to capture the full <head>
+        // Read up to 32 KB to be sure we capture the full <head>
         const reader = pageRes.body?.getReader();
         const chunks: Uint8Array[] = [];
         let totalBytes = 0;
         if (reader) {
-          while (totalBytes < 20_000) {
+          while (totalBytes < 32_000) {
             const { done, value } = await reader.read();
             if (done || !value) break;
             chunks.push(value);
@@ -396,10 +346,10 @@ async function fetchPricesmartByUrl(url: URL): Promise<ProductHit | { error: str
             return merged;
           }, new Uint8Array(0)),
         );
-        // Match either attribute order in the meta tag
+        // Match og:image in either attribute order, with optional whitespace
         const ogMatch =
-          html.match(/property="og:image"\s+content="([^"]+)"/) ??
-          html.match(/content="([^"]+)"\s+property="og:image"/);
+          html.match(/property=["']og:image["'][^>]*content=["']([^"']+)["']/) ??
+          html.match(/content=["']([^"']+)["'][^>]*property=["']og:image["']/);
         if (ogMatch?.[1]) image = ogMatch[1];
       }
     } catch { /* image stays null */ }
