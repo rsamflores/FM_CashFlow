@@ -645,6 +645,7 @@ function ItemGroups({ items }: { items: ShoppingListItemRow[] }) {
 function ItemRow({ item }: { item: ShoppingListItemRow }) {
   const [qty, setQty] = useState(String(item.quantity));
   const [price, setPrice] = useState(String(item.unit_price));
+  const [editOpen, setEditOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   function commitQty() {
@@ -653,9 +654,7 @@ function ItemRow({ item }: { item: ShoppingListItemRow }) {
       setQty(String(item.quantity));
       return;
     }
-    startTransition(async () => {
-      await updateItem(item.id, { quantity: n });
-    });
+    startTransition(async () => { await updateItem(item.id, { quantity: n }); });
   }
   function commitPrice() {
     const n = Number(price);
@@ -663,87 +662,258 @@ function ItemRow({ item }: { item: ShoppingListItemRow }) {
       setPrice(String(item.unit_price));
       return;
     }
-    startTransition(async () => {
-      await updateItem(item.id, { unit_price: n });
-    });
+    startTransition(async () => { await updateItem(item.id, { unit_price: n }); });
   }
   function toggle() {
-    startTransition(async () => {
-      await toggleItemChecked(item.id, !item.is_checked);
-    });
+    startTransition(async () => { await toggleItemChecked(item.id, !item.is_checked); });
   }
   function remove() {
     if (!confirm("¿Eliminar este item?")) return;
-    startTransition(async () => {
-      await removeItem(item.id);
-    });
+    startTransition(async () => { await removeItem(item.id); });
   }
 
   const subtotal = Number(item.quantity) * Number(item.unit_price);
 
   return (
-    <li className="flex items-center gap-sm px-md py-sm" style={{ opacity: pending ? 0.5 : 1 }}>
-      <input
-        type="checkbox"
-        checked={item.is_checked}
-        onChange={toggle}
-        className="w-5 h-5 accent-primary shrink-0"
-        title="En el carrito"
-      />
-      {item.image_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={item.image_url}
-          alt={item.name}
-          className="w-12 h-12 object-contain rounded-md bg-white shrink-0"
-          loading="lazy"
+    <>
+      <li className="flex items-center gap-sm px-md py-sm" style={{ opacity: pending ? 0.5 : 1 }}>
+        <input
+          type="checkbox"
+          checked={item.is_checked}
+          onChange={toggle}
+          className="w-5 h-5 accent-primary shrink-0"
+          title="En el carrito"
         />
-      ) : (
-        <div className="w-12 h-12 rounded-md bg-surface-container-highest flex items-center justify-center shrink-0">
-          <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: 18 }}>
-            shopping_basket
-          </span>
-        </div>
-      )}
-      <div className="flex-1 min-w-0">
-        <p
-          className="text-body-sm text-on-surface truncate"
-          style={{ textDecoration: item.is_checked ? "line-through" : "none" }}
+        {/* Thumbnail — clickable to open edit */}
+        <button
+          type="button"
+          onClick={() => setEditOpen(true)}
+          title="Editar ítem"
+          className="w-12 h-12 rounded-md shrink-0 overflow-hidden hover:ring-2 hover:ring-primary transition-all"
         >
-          {item.name}
-        </p>
-        <p className="text-label-md text-on-surface-variant">{formatCurrency(subtotal)}</p>
-      </div>
-      <input
-        type="number"
-        step="0.01"
-        min="0"
-        value={qty}
-        onChange={(e) => setQty(e.target.value)}
-        onBlur={commitQty}
-        className="w-16 h-8 px-sm rounded-md bg-surface-container-high text-on-surface text-body-sm text-right outline-none border-none"
-        title="Cantidad"
+          {item.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={item.image_url}
+              alt={item.name}
+              className="w-full h-full object-contain bg-white"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full bg-surface-container-highest flex items-center justify-center">
+              <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: 18 }}>
+                shopping_basket
+              </span>
+            </div>
+          )}
+        </button>
+        <div className="flex-1 min-w-0">
+          <p
+            className="text-body-sm text-on-surface truncate"
+            style={{ textDecoration: item.is_checked ? "line-through" : "none" }}
+          >
+            {item.name}
+          </p>
+          <p className="text-label-md text-on-surface-variant">{formatCurrency(subtotal)}</p>
+        </div>
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          onBlur={commitQty}
+          className="w-16 h-8 px-sm rounded-md bg-surface-container-high text-on-surface text-body-sm text-right outline-none border-none"
+          title="Cantidad"
+        />
+        <span className="text-label-md text-on-surface-variant">×</span>
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          onBlur={commitPrice}
+          className="w-20 h-8 px-sm rounded-md bg-surface-container-high text-on-surface text-body-sm text-right outline-none border-none"
+          title="Precio unitario"
+        />
+        <button
+          type="button"
+          onClick={() => setEditOpen(true)}
+          title="Editar ítem"
+          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container-highest text-on-surface-variant transition-colors"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>
+        </button>
+        <button
+          type="button"
+          onClick={remove}
+          title="Eliminar"
+          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
+        </button>
+      </li>
+      {editOpen && <ItemEditDialog item={item} onClose={() => setEditOpen(false)} />}
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Item edit dialog
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ItemEditDialog({ item, onClose }: { item: ShoppingListItemRow; onClose: () => void }) {
+  const [name, setName] = useState(item.name);
+  const [store, setStore] = useState<Store>(item.store);
+  const [qty, setQty] = useState(String(item.quantity));
+  const [price, setPrice] = useState(String(item.unit_price));
+  const [imageUrl, setImageUrl] = useState(item.image_url ?? "");
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  // Live preview: show the typed URL as an image if it looks like a URL
+  const previewUrl = imageUrl.trim().startsWith("http") ? imageUrl.trim() : null;
+
+  function save() {
+    setError(null);
+    const qn = Number(qty);
+    const pn = Number(price);
+    if (!name.trim()) return setError("Nombre requerido");
+    if (!qn || qn <= 0) return setError("Cantidad inválida");
+    if (pn < 0 || Number.isNaN(pn)) return setError("Precio inválido");
+
+    startTransition(async () => {
+      const res = await updateItem(item.id, {
+        name: name.trim(),
+        store,
+        quantity: qn,
+        unit_price: pn,
+        image_url: imageUrl.trim() || null,
+      });
+      if ("error" in res && res.error) { setError(res.error); return; }
+      onClose();
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/60"
+        onClick={onClose}
+        style={{ backdropFilter: "blur(4px)" }}
       />
-      <span className="text-label-md text-on-surface-variant">×</span>
-      <input
-        type="number"
-        step="0.01"
-        min="0"
-        value={price}
-        onChange={(e) => setPrice(e.target.value)}
-        onBlur={commitPrice}
-        className="w-20 h-8 px-sm rounded-md bg-surface-container-high text-on-surface text-body-sm text-right outline-none border-none"
-        title="Precio unitario"
-      />
-      <button
-        type="button"
-        onClick={remove}
-        title="Eliminar"
-        className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors"
+      <div
+        className="relative z-10 bg-surface-container rounded-2xl border border-outline-variant/20 shadow-2xl w-full p-lg flex flex-col gap-md"
+        style={{ maxWidth: 420, margin: "0 16px" }}
       >
-        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
-      </button>
-    </li>
+        <div className="flex items-center justify-between">
+          <h3 className="text-title-md text-on-surface">Editar ítem</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-full hover:bg-surface-container-high flex items-center justify-center"
+          >
+            <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: 18 }}>close</span>
+          </button>
+        </div>
+
+        {/* Image preview + URL input */}
+        <div className="flex gap-md items-start">
+          <div className="w-16 h-16 rounded-xl bg-surface-container-highest overflow-hidden shrink-0 flex items-center justify-center border border-outline-variant/20">
+            {previewUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={previewUrl} alt="preview" className="w-full h-full object-contain bg-white" />
+            ) : (
+              <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: 28 }}>image</span>
+            )}
+          </div>
+          <label className="flex flex-col gap-xs flex-1">
+            <span className="text-label-md text-on-surface-variant">URL de imagen</span>
+            <input
+              type="url"
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              placeholder="https://…"
+              className="h-10 px-md rounded-lg bg-surface-container-high text-on-surface text-body-sm outline-none border-none"
+            />
+            {imageUrl && !previewUrl && (
+              <span className="text-label-md text-on-surface-variant">Pega una URL que empiece con https://</span>
+            )}
+          </label>
+        </div>
+
+        <label className="flex flex-col gap-xs">
+          <span className="text-label-md text-on-surface-variant">Nombre</span>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="h-10 px-md rounded-lg bg-surface-container-high text-on-surface text-body-sm outline-none border-none"
+          />
+        </label>
+
+        <label className="flex flex-col gap-xs">
+          <span className="text-label-md text-on-surface-variant">Tienda</span>
+          <select
+            value={store}
+            onChange={(e) => setStore(e.target.value as Store)}
+            className="h-10 px-md rounded-lg bg-surface-container-high text-on-surface text-body-sm outline-none border-none"
+          >
+            <option value="walmart">Walmart</option>
+            <option value="pricesmart">PriceSmart</option>
+            <option value="agromercado">Agromercado</option>
+            <option value="dollarcity">Dollar City</option>
+            <option value="manual">Otro / sin tienda</option>
+          </select>
+        </label>
+
+        <div className="grid grid-cols-2 gap-sm">
+          <label className="flex flex-col gap-xs">
+            <span className="text-label-md text-on-surface-variant">Cantidad</span>
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+              className="h-10 px-md rounded-lg bg-surface-container-high text-on-surface text-body-sm outline-none border-none"
+            />
+          </label>
+          <label className="flex flex-col gap-xs">
+            <span className="text-label-md text-on-surface-variant">Precio unitario</span>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              className="h-10 px-md rounded-lg bg-surface-container-high text-on-surface text-body-sm outline-none border-none"
+            />
+          </label>
+        </div>
+
+        {error && <p className="text-label-md text-error">{error}</p>}
+
+        <div className="flex justify-end gap-sm">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-10 px-md rounded-full bg-surface-container-high text-on-surface text-body-sm font-bold"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={save}
+            className="h-10 px-md rounded-full bg-primary-container text-on-primary-container text-body-sm font-bold disabled:opacity-50"
+          >
+            {pending ? "Guardando…" : "Guardar cambios"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
