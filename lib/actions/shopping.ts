@@ -829,14 +829,13 @@ async function buildStoreBudget(
     .maybeSingle();
   const expected = Number(budgetRow?.expected_amount ?? 0);
 
-  // Spent: egresos confirmados que afectan balance en esa categoría este mes
+  // Spent: TODOS los egresos (confirmados + pendientes) que afectan balance en esa categoría este mes
   const { data: spentRows } = await supabase
     .from("transactions")
     .select("amount")
     .eq("scope", "personal")
     .eq("kind", "expense")
     .eq("category_id", cat.id)
-    .eq("is_confirmed", true)
     .eq("affects_balance", true)
     .gte("occurred_on", monthStart)
     .lt("occurred_on", monthEnd);
