@@ -42,6 +42,7 @@ export type ShoppingListItemRow = {
   product_url: string | null;
   external_id: string | null;
   is_checked: boolean;
+  category_override: string | null;
   created_at: string;
 };
 
@@ -866,7 +867,7 @@ export async function addItem(input: {
 
 export async function updateItem(
   id: string,
-  patch: { quantity?: number; unit_price?: number; name?: string; store?: Store; image_url?: string | null },
+  patch: { quantity?: number; unit_price?: number; name?: string; store?: Store; image_url?: string | null; category_override?: string | null },
 ) {
   const supabase = await createClient();
   const updates: Record<string, unknown> = {};
@@ -875,6 +876,7 @@ export async function updateItem(
   if (patch.name !== undefined) updates.name = patch.name.trim();
   if (patch.store !== undefined) updates.store = patch.store;
   if (patch.image_url !== undefined) updates.image_url = patch.image_url;
+  if (patch.category_override !== undefined) updates.category_override = patch.category_override;
   if (Object.keys(updates).length === 0) return { success: true };
   const { error } = await supabase.from("shopping_list_items").update(updates).eq("id", id);
   if (error) return { error: error.message };

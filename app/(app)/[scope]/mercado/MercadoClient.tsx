@@ -158,7 +158,14 @@ for (const cat of CAT_DEFS) {
 // All canonical category labels in display order (for sorting groups)
 const CAT_ORDER = CAT_DEFS.map((c) => c.label);
 
-function classifyItem(name: string): CatInfo {
+// Look up icon for a given category label (used when restoring an override)
+function catIcon(label: string): string {
+  return CAT_DEFS.find((c) => c.label === label)?.icon ?? "📦";
+}
+
+// Classify item by name, respecting a user-set override
+function classifyItem(name: string, override?: string | null): CatInfo {
+  if (override) return { label: override, icon: catIcon(override) };
   const tokens = tokenize(name);
   // Check bigrams first (more specific)
   for (let i = 0; i < tokens.length - 1; i++) {
@@ -742,6 +749,20 @@ function ManualAddDialog({ listId, onClose }: { listId: string; onClose: () => v
 // Items grouped by store or by grocery category
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Sort category sub-groups: canonical order first, then "Otros" last
+function sortCatGroups(entries: [string, { icon: string; items: ShoppingListItemRow[] }][]) {
+  return entries.sort(([a], [b]) => {
+    if (a === "Otros" && b !== "Otros") return 1;
+    if (b === "Otros" && a !== "Otros") return -1;
+    const ia = CAT_ORDER.indexOf(a);
+    const ib = CAT_ORDER.indexOf(b);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return a.localeCompare(b);
+  });
+}
+
 function ItemGroups({ items, viewMode }: { items: ShoppingListItemRow[]; viewMode: ViewMode }) {
   if (items.length === 0) {
     return (
@@ -756,45 +777,65 @@ function ItemGroups({ items, viewMode }: { items: ShoppingListItemRow[]; viewMod
     );
   }
 
-  if (viewMode === "category") {
-    // Group items by grocery category, preserving the canonical category order
-    const byCategory = new Map<string, { icon: string; items: ShoppingListItemRow[] }>();
-    for (const item of items) {
-      const { label, icon } = classifyItem(item.name);
-      if (!byCategory.has(label)) byCategory.set(label, { icon, items: [] });
-      byCategory.get(label)!.items.push(item);
-    }
-    // Sort groups following GROCERY_CATEGORIES order, then alphabetically for unknowns
-    const catOrder = CAT_ORDER;
-    const groups = [...byCategory.entries()].sort(
-      ([a], [b]) => {
-        const ia = catOrder.indexOf(a);
-        const ib = catOrder.indexOf(b);
-        if (ia !== -1 && ib !== -1) return ia - ib;
-        if (ia !== -1) return -1;
-        if (ib !== -1) return 1;
-        return a.localeCompare(b);
-      },
-    );
+  const stores: Store[] = ["walmart", "pricesmart", "agromercado", "dollarcity", "manual"];
 
+  if (viewMode === "category") {
+    // Two-level: store (outer) → grocery category (inner)
     return (
       <div className="flex flex-col gap-md">
-        {groups.map(([label, { icon, items: group }]) => {
-          const subtotal = group.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0);
+        {stores.map((store) => {
+          const storeItems = items.filter((i) => i.store === store);
+          if (storeItems.length === 0) return null;
+          const storeSubtotal = storeItems.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0);
+
+          // Group within this store by grocery category
+          const byCategory = new Map<string, { icon: string; items: ShoppingListItemRow[] }>();
+          for (const item of storeItems) {
+            const { label, icon } = classifyItem(item.name, item.category_override);
+            if (!byCategory.has(label)) byCategory.set(label, { icon, items: [] });
+            byCategory.get(label)!.items.push(item);
+          }
+          const catGroups = sortCatGroups([...byCategory.entries()]);
+
           return (
-            <div key={label} className="rounded-2xl border border-outline-variant/10 bg-surface-container-low overflow-hidden">
-              <div className="px-lg py-sm border-b border-outline-variant/10 flex items-center gap-sm bg-surface-container">
-                <span style={{ fontSize: 18 }}>{icon}</span>
-                <h3 className="text-body-sm font-bold text-on-surface flex-1">
-                  {label} ({group.length})
+            <div
+              key={store}
+              className="rounded-2xl border overflow-hidden"
+              style={{ borderColor: STORE_COLOR[store] + "30" }}
+            >
+              {/* Store header */}
+              <div
+                className="px-lg py-sm flex items-center gap-sm"
+                style={{ background: STORE_COLOR[store] + "14" }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18, color: STORE_COLOR[store] }}>
+                  {STORE_ICON[store]}
+                </span>
+                <h3 className="text-body-sm font-bold flex-1" style={{ color: STORE_COLOR[store] }}>
+                  {STORE_LABEL[store]} ({storeItems.length})
                 </h3>
-                <span className="text-body-sm font-bold text-on-surface">{formatCurrency(subtotal)}</span>
+                <span className="text-body-sm font-bold text-on-surface">{formatCurrency(storeSubtotal)}</span>
               </div>
-              <ul className="divide-y divide-outline-variant/10">
-                {group.map((it) => (
-                  <ItemRow key={it.id} item={it} showStoreBadge />
-                ))}
-              </ul>
+              {/* Category sub-groups */}
+              <div className="flex flex-col divide-y divide-outline-variant/10 bg-surface-container-low">
+                {catGroups.map(([label, { icon, items: group }]) => {
+                  const catSubtotal = group.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0);
+                  return (
+                    <div key={label}>
+                      <div className="px-lg py-xs flex items-center gap-sm bg-surface-container/60 border-b border-outline-variant/10">
+                        <span style={{ fontSize: 14 }}>{icon}</span>
+                        <span className="text-label-md font-bold text-on-surface-variant flex-1">{label}</span>
+                        <span className="text-label-md text-on-surface-variant">{formatCurrency(catSubtotal)}</span>
+                      </div>
+                      <ul className="divide-y divide-outline-variant/10">
+                        {group.map((it) => (
+                          <ItemRow key={it.id} item={it} />
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           );
         })}
@@ -802,8 +843,7 @@ function ItemGroups({ items, viewMode }: { items: ShoppingListItemRow[]; viewMod
     );
   }
 
-  // Default: group by store
-  const stores: Store[] = ["walmart", "pricesmart", "agromercado", "dollarcity", "manual"];
+  // Default: flat group by store
   return (
     <div className="flex flex-col gap-md">
       {stores.map((store) => {
@@ -974,11 +1014,16 @@ function ItemEditDialog({ item, onClose }: { item: ShoppingListItemRow; onClose:
   const [qty, setQty] = useState(String(item.quantity));
   const [price, setPrice] = useState(String(item.unit_price));
   const [imageUrl, setImageUrl] = useState(item.image_url ?? "");
+  // "" means auto-detect; any CAT_DEFS label means manual override
+  const [catOverride, setCatOverride] = useState<string>(item.category_override ?? "");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   // Live preview: show the typed URL as an image if it looks like a URL
   const previewUrl = imageUrl.trim().startsWith("http") ? imageUrl.trim() : null;
+
+  // Show auto-detected category as hint in the selector
+  const autoDetected = classifyItem(name.trim() || item.name);
 
   function save() {
     setError(null);
@@ -995,6 +1040,7 @@ function ItemEditDialog({ item, onClose }: { item: ShoppingListItemRow; onClose:
         quantity: qn,
         unit_price: pn,
         image_url: imageUrl.trim() || null,
+        category_override: catOverride || null,
       });
       if ("error" in res && res.error) { setError(res.error); return; }
       onClose();
@@ -1070,6 +1116,25 @@ function ItemEditDialog({ item, onClose }: { item: ShoppingListItemRow; onClose:
             <option value="agromercado">Agromercado</option>
             <option value="dollarcity">Dollar City</option>
             <option value="manual">Otro / sin tienda</option>
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-xs">
+          <span className="text-label-md text-on-surface-variant">Tipo de producto</span>
+          <select
+            value={catOverride}
+            onChange={(e) => setCatOverride(e.target.value)}
+            className="h-10 px-md rounded-lg bg-surface-container-high text-on-surface text-body-sm outline-none border-none"
+          >
+            <option value="">
+              Auto-detectar ({autoDetected.icon} {autoDetected.label})
+            </option>
+            {CAT_DEFS.map((c) => (
+              <option key={c.label} value={c.label}>
+                {c.icon} {c.label}
+              </option>
+            ))}
+            <option value="Otros">📦 Otros</option>
           </select>
         </label>
 
