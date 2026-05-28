@@ -404,19 +404,20 @@ export async function ensureActiveList(): Promise<{ id: string } | { error: stri
   if (!userId) return { error: "No autenticado" };
   const supabase = await createClient();
 
+  // Buscar lista activa del scope (compartida entre todos los miembros)
   const { data: existing } = await supabase
     .from("shopping_lists")
     .select("id")
-    .eq("user_id", userId)
+    .eq("scope", "personal")
     .eq("status", "active")
     .maybeSingle();
   if (existing?.id) return { id: existing.id };
 
-  // Buscar la última lista purchased para copiar items
+  // Buscar la última lista purchased del scope para copiar items
   const { data: lastPurchased } = await supabase
     .from("shopping_lists")
     .select("id")
-    .eq("user_id", userId)
+    .eq("scope", "personal")
     .eq("status", "purchased")
     .order("purchased_at", { ascending: false })
     .limit(1)
@@ -464,11 +465,11 @@ export async function getActiveList(): Promise<ActiveListPayload | { error: stri
   if (!userId) return { error: "No autenticado" };
   const supabase = await createClient();
 
-  // 1. Lista activa
+  // 1. Lista activa del scope (compartida)
   const { data: list, error: listErr } = await supabase
     .from("shopping_lists")
     .select("*")
-    .eq("user_id", userId)
+    .eq("scope", "personal")
     .eq("status", "active")
     .maybeSingle();
   if (listErr) return { error: listErr.message };
@@ -497,7 +498,7 @@ export async function getActiveList(): Promise<ActiveListPayload | { error: stri
   const { data: pastLists } = await supabase
     .from("shopping_lists")
     .select("id")
-    .eq("user_id", userId)
+    .eq("scope", "personal")
     .eq("status", "purchased")
     .order("purchased_at", { ascending: false })
     .limit(5);
@@ -843,7 +844,7 @@ export async function getHistory(limit = 10): Promise<HistoryEntry[]> {
   const { data: lists } = await supabase
     .from("shopping_lists")
     .select("id, name, purchased_at, total_at_purchase")
-    .eq("user_id", userId)
+    .eq("scope", "personal")
     .eq("status", "purchased")
     .order("purchased_at", { ascending: false })
     .limit(limit);
