@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { formatCurrency } from "@/lib/format";
 import type { AccountRow } from "@/lib/actions/accounts";
 import type { CategoryRow } from "@/lib/actions/categories";
@@ -11,6 +11,9 @@ import {
   toggleItemChecked,
   searchProducts,
   fetchProductFromUrl,
+  getListItems,
+  importItems,
+  fetchGenericImage,
   type ShoppingListRow,
   type ShoppingListItemRow,
   type Suggestion,
@@ -116,7 +119,7 @@ export function MercadoClient({
       )}
 
       {/* History */}
-      {history.length > 0 && <HistoryPanel history={history} />}
+      {history.length > 0 && <HistoryPanel history={history} activeItems={items} listId={list.id} />}
 
       <PurchaseDialog
         open={purchaseOpen}
@@ -496,16 +499,22 @@ function ManualAddDialog({ listId, onClose }: { listId: string; onClose: () => v
     if (!name.trim()) return setError("Nombre requerido");
     if (!qn || qn <= 0) return setError("Cantidad inválida");
     if (pn < 0 || Number.isNaN(pn)) return setError("Precio inválido");
+    const nameCopy = name.trim();
     startTransition(async () => {
       const res = await addItem({
         list_id: listId,
-        name,
+        name: nameCopy,
         store,
         quantity: qn,
         unit_price: pn,
       });
-      if ("error" in res && res.error) setError(res.error);
-      else onClose();
+      if ("error" in res && res.error) { setError(res.error); return; }
+      onClose();
+      // Fetch reference image from Wikipedia ES in the background — non-blocking
+      if ("id" in res && typeof res.id === "string") {
+        const imageUrl = await fetchGenericImage(nameCopy);
+        if (imageUrl) await updateItem(res.id, { image_url: imageUrl });
+      }
     });
   }
 
@@ -802,11 +811,21 @@ function SuggestionsPanel({ suggestions, listId }: { suggestions: Suggestion[]; 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// History
+// History + Import
 // ─────────────────────────────────────────────────────────────────────────────
 
-function HistoryPanel({ history }: { history: HistoryEntry[] }) {
+function HistoryPanel({
+  history,
+  activeItems,
+  listId,
+}: {
+  history: HistoryEntry[];
+  activeItems: ShoppingListItemRow[];
+  listId: string;
+}) {
   const [open, setOpen] = useState(false);
+  const [importEntry, setImportEntry] = useState<HistoryEntry | null>(null);
+
   return (
     <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low overflow-hidden">
       <button
@@ -830,7 +849,7 @@ function HistoryPanel({ history }: { history: HistoryEntry[] }) {
       {open && (
         <ul className="divide-y divide-outline-variant/10">
           {history.map((h) => (
-            <li key={h.id} className="flex items-center gap-sm px-lg py-sm">
+            <li key={h.id} className="flex items-center gap-sm px-lg py-sm flex-wrap">
               <div className="flex-1 min-w-0">
                 <p className="text-body-sm text-on-surface">
                   {new Date(h.purchased_at).toLocaleDateString("es-SV", {
@@ -844,6 +863,15 @@ function HistoryPanel({ history }: { history: HistoryEntry[] }) {
               <span className="text-body-sm font-bold text-on-surface">
                 {formatCurrency(h.total_at_purchase)}
               </span>
+              <button
+                type="button"
+                onClick={() => setImportEntry(h)}
+                className="h-8 px-sm rounded-full bg-surface-container-high hover:bg-surface-container-highest text-body-sm text-on-surface flex items-center gap-xs transition-colors shrink-0"
+                title="Ver ítems e importar a la lista activa"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>download</span>
+                Ver ítems
+              </button>
               {(h.transaction_ids.walmart || h.transaction_ids.pricesmart) && (
                 <a
                   href="/personal/transactions"
@@ -857,6 +885,234 @@ function HistoryPanel({ history }: { history: HistoryEntry[] }) {
           ))}
         </ul>
       )}
+
+      {importEntry && (
+        <ImportDialog
+          sourceEntry={importEntry}
+          activeItems={activeItems}
+          targetListId={listId}
+          onClose={() => setImportEntry(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Import dialog — importar ítems de una lista anterior
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ImportDialog({
+  sourceEntry,
+  activeItems,
+  targetListId,
+  onClose,
+}: {
+  sourceEntry: HistoryEntry;
+  activeItems: ShoppingListItemRow[];
+  targetListId: string;
+  onClose: () => void;
+}) {
+  const [sourceItems, setSourceItems] = useState<ShoppingListItemRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  // Set of "store|name_lower" keys already in the active list
+  const activeKeys = new Set(
+    activeItems.map((i) => `${i.store}|${i.name.toLowerCase().trim()}`),
+  );
+
+  useEffect(() => {
+    setLoading(true);
+    getListItems(sourceEntry.id).then((items) => {
+      setSourceItems(items);
+      setLoading(false);
+    });
+  }, [sourceEntry.id]);
+
+  const alreadyIn = (item: ShoppingListItemRow) =>
+    activeKeys.has(`${item.store}|${item.name.toLowerCase().trim()}`);
+
+  const importable = sourceItems.filter((i) => !alreadyIn(i));
+
+  function toggleAll() {
+    if (selected.size === importable.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(importable.map((i) => i.id)));
+    }
+  }
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function doImport() {
+    setError(null);
+    const toImport = sourceItems.filter((i) => selected.has(i.id));
+    if (!toImport.length) return;
+    startTransition(async () => {
+      const res = await importItems(targetListId, toImport);
+      if ("error" in res) { setError(res.error); return; }
+      onClose();
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/60"
+        onClick={onClose}
+        style={{ backdropFilter: "blur(4px)" }}
+      />
+      <div
+        className="relative z-10 bg-surface-container rounded-2xl border border-outline-variant/20 shadow-2xl w-full flex flex-col"
+        style={{ maxWidth: 520, margin: "0 16px", maxHeight: "88vh" }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-lg border-b border-outline-variant/10 shrink-0">
+          <div>
+            <h2 className="text-title-md text-on-surface">Importar ítems</h2>
+            <p className="text-label-md text-on-surface-variant mt-xs">
+              {new Date(sourceEntry.purchased_at).toLocaleDateString("es-SV", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}{" "}
+              · {formatCurrency(sourceEntry.total_at_purchase)}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-9 h-9 rounded-full hover:bg-surface-container-high flex items-center justify-center shrink-0"
+          >
+            <span className="material-symbols-outlined text-on-surface-variant">close</span>
+          </button>
+        </div>
+
+        {/* Actions bar */}
+        {!loading && importable.length > 0 && (
+          <div className="flex items-center gap-sm px-lg py-sm border-b border-outline-variant/10 bg-surface-container-low shrink-0">
+            <button
+              type="button"
+              onClick={toggleAll}
+              className="text-label-md text-primary hover:underline"
+            >
+              {selected.size === importable.length ? "Deseleccionar todos" : "Seleccionar todos los que faltan"}
+            </button>
+            <span className="text-label-md text-on-surface-variant flex-1 text-right">
+              {importable.length - selected.size} disponibles
+            </span>
+          </div>
+        )}
+
+        {/* Item list */}
+        <div className="overflow-y-auto flex-1">
+          {loading ? (
+            <div className="flex items-center justify-center p-xl">
+              <span className="text-label-md text-on-surface-variant">Cargando ítems…</span>
+            </div>
+          ) : sourceItems.length === 0 ? (
+            <div className="flex items-center justify-center p-xl">
+              <span className="text-label-md text-on-surface-variant">Esta lista no tiene ítems.</span>
+            </div>
+          ) : (
+            <ul className="divide-y divide-outline-variant/10">
+              {sourceItems.map((item) => {
+                const inList = alreadyIn(item);
+                const isSelected = selected.has(item.id);
+                return (
+                  <li
+                    key={item.id}
+                    className="flex items-center gap-sm px-md py-sm"
+                    style={{ opacity: inList ? 0.5 : 1 }}
+                  >
+                    {inList ? (
+                      <div className="w-5 h-5 shrink-0" />
+                    ) : (
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggle(item.id)}
+                        className="w-5 h-5 accent-primary shrink-0"
+                      />
+                    )}
+                    {item.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={item.image_url}
+                        alt={item.name}
+                        className="w-11 h-11 object-contain rounded-md bg-white shrink-0"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-11 h-11 rounded-md bg-surface-container-highest flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: 16 }}>
+                          shopping_basket
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-body-sm text-on-surface truncate">{item.name}</p>
+                      <p className="text-label-md text-on-surface-variant flex items-center gap-xs">
+                        <span
+                          className="material-symbols-outlined"
+                          style={{ fontSize: 11, color: STORE_COLOR[item.store] }}
+                        >
+                          {STORE_ICON[item.store]}
+                        </span>
+                        {STORE_LABEL[item.store]} · {formatCurrency(Number(item.unit_price))}
+                      </p>
+                    </div>
+                    {inList ? (
+                      <span
+                        className="text-label-md px-xs py-0.5 rounded-full shrink-0"
+                        style={{ background: "var(--color-surface-container-highest)", color: "var(--color-on-surface-variant)" }}
+                      >
+                        Ya en lista
+                      </span>
+                    ) : (
+                      <span className="text-label-md text-on-surface-variant shrink-0">
+                        ×{item.quantity}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-lg border-t border-outline-variant/10 flex flex-col gap-sm shrink-0">
+          {error && <p className="text-label-md text-error">{error}</p>}
+          <div className="flex justify-end gap-sm">
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-10 px-md rounded-full bg-surface-container-high text-on-surface text-body-sm font-bold"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={pending || selected.size === 0}
+              onClick={doImport}
+              className="h-10 px-md rounded-full bg-primary-container text-on-primary-container text-body-sm font-bold disabled:opacity-50"
+            >
+              {pending ? "Añadiendo…" : `Añadir seleccionados (${selected.size})`}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

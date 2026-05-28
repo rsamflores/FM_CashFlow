@@ -759,24 +759,28 @@ export async function addItem(input: {
   if (input.unit_price < 0) return { error: "Precio inválido" };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("shopping_list_items").insert({
-    list_id: input.list_id,
-    name: input.name.trim(),
-    store: input.store,
-    quantity: input.quantity,
-    unit_price: input.unit_price,
-    image_url: input.image_url ?? null,
-    product_url: input.product_url ?? null,
-    external_id: input.external_id ?? null,
-  });
+  const { data, error } = await supabase
+    .from("shopping_list_items")
+    .insert({
+      list_id: input.list_id,
+      name: input.name.trim(),
+      store: input.store,
+      quantity: input.quantity,
+      unit_price: input.unit_price,
+      image_url: input.image_url ?? null,
+      product_url: input.product_url ?? null,
+      external_id: input.external_id ?? null,
+    })
+    .select("id")
+    .single();
   if (error) return { error: error.message };
   revalidatePath("/personal/mercado");
-  return { success: true };
+  return { success: true as const, id: data.id as string };
 }
 
 export async function updateItem(
   id: string,
-  patch: { quantity?: number; unit_price?: number; name?: string; store?: Store },
+  patch: { quantity?: number; unit_price?: number; name?: string; store?: Store; image_url?: string | null },
 ) {
   const supabase = await createClient();
   const updates: Record<string, unknown> = {};
@@ -784,6 +788,7 @@ export async function updateItem(
   if (patch.unit_price !== undefined) updates.unit_price = patch.unit_price;
   if (patch.name !== undefined) updates.name = patch.name.trim();
   if (patch.store !== undefined) updates.store = patch.store;
+  if (patch.image_url !== undefined) updates.image_url = patch.image_url;
   if (Object.keys(updates).length === 0) return { success: true };
   const { error } = await supabase.from("shopping_list_items").update(updates).eq("id", id);
   if (error) return { error: error.message };
@@ -1021,4 +1026,86 @@ export async function getHistory(limit = 10): Promise<HistoryEntry[]> {
     total_at_purchase: Number(l.total_at_purchase ?? 0),
     transaction_ids: byList.get(l.id as string) ?? {},
   }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Importar ítems de lista anterior
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Devuelve todos los ítems de una lista (para el modal de importación). */
+export async function getListItems(listId: string): Promise<ShoppingListItemRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("shopping_list_items")
+    .select("*")
+    .eq("list_id", listId)
+    .order("created_at", { ascending: true });
+  return (data ?? []) as ShoppingListItemRow[];
+}
+
+/**
+ * Inserta ítems seleccionados de una lista anterior en la lista activa.
+ * Espera que los ítems pasados NO estén ya en la lista activa (la UI lo garantiza).
+ */
+export async function importItems(
+  targetListId: string,
+  items: Pick<
+    ShoppingListItemRow,
+    "name" | "store" | "quantity" | "unit_price" | "image_url" | "product_url" | "external_id"
+  >[],
+): Promise<{ count: number } | { error: string }> {
+  if (!items.length) return { count: 0 };
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("shopping_list_items")
+    .insert(
+      items.map((it) => ({
+        list_id: targetListId,
+        name: it.name,
+        store: it.store,
+        quantity: it.quantity,
+        unit_price: it.unit_price,
+        image_url: it.image_url ?? null,
+        product_url: it.product_url ?? null,
+        external_id: it.external_id ?? null,
+        is_checked: false,
+      })),
+    )
+    .select("id");
+  if (error) return { error: error.message };
+  revalidatePath("/personal/mercado");
+  return { count: (data ?? []).length };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Imagen genérica para ítems manuales (Wikipedia ES)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Busca una imagen de referencia genérica para el nombre dado usando la API
+ * pública de Wikipedia en español.
+ * - Sin credenciales, sin cuota.
+ * - Funciona bien para alimentos comunes: "manzana", "leche", "pollo", etc.
+ * - Retorna null si no se encuentra artículo o no tiene thumbnail.
+ */
+export async function fetchGenericImage(name: string): Promise<string | null> {
+  const ctrl = new AbortController();
+  const tmo = setTimeout(() => ctrl.abort(), 4000);
+  try {
+    const res = await fetch(
+      `https://es.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name.trim())}`,
+      {
+        headers: { "User-Agent": UA, Accept: "application/json" },
+        signal: ctrl.signal,
+      },
+    );
+    if (!res.ok) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: any = await res.json();
+    return (data?.thumbnail?.source as string) ?? null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(tmo);
+  }
 }
