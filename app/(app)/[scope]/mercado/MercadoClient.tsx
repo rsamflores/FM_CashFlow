@@ -59,66 +59,117 @@ const STORE_ICON: Record<Store, string> = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Grocery category classifier (client-side keyword matching, no API needed)
+// Grocery category classifier — word/bigram dictionary, no regex word-boundary
+// issues with accented chars, numbers, or slashes in product names.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const GROCERY_CATEGORIES: { label: string; icon: string; keywords: RegExp[] }[] = [
+// Normalize: lowercase + remove accents + keep letters and digits
+function normStr(s: string) {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, ""); // strip combining diacritical marks
+}
+
+// Split a product name into tokens (words ≥ 3 chars that aren't pure numbers)
+function tokenize(name: string): string[] {
+  return normStr(name)
+    .split(/[\s/\-,.()[\]'"]+/)
+    .filter((w) => w.length >= 3 && !/^\d+$/.test(w));
+}
+
+type CatDef = { label: string; icon: string; unigrams: string[]; bigrams: string[] };
+
+// Each entry: unigrams are single-word triggers; bigrams are "word1 word2" pairs.
+// All strings already normalized (no accents, lowercase).
+const CAT_DEFS: CatDef[] = [
   {
     label: "Frutas y Verduras", icon: "🥦",
-    keywords: [/\b(manzana|pera|naranja|mandarina|uvas?|fresas?|melón|melon|sandía|sandia|piña|pina|mango|papaya|aguacate|plátanos?|platanos?|banano|banana|tomates?|lechuga|espinaca|zanahorias?|cebolla|ajo|papas?|yuca|brócoli|brocoli|coliflor|chile|pepino|ejotes?|elotes?|maíz|maiz|apio|rábano|rabano|betabel|remolacha|cilantro|perejil|nopal|champiñones?|hongos?|chayote|güisquil)\b/i],
+    unigrams: ["manzana","pera","naranja","mandarina","uva","fresa","melon","sandia","pina","mango","papaya","aguacate","platano","banano","banana","tomate","lechuga","espinaca","zanahoria","cebolla","papa","yuca","brocoli","coliflor","chile","pepino","ejote","elote","maiz","apio","rabano","betabel","remolacha","cilantro","perejil","nopal","champinon","chayote","guisquil","hongos","champin"],
+    bigrams: [],
   },
   {
     label: "Carnes y Mariscos", icon: "🥩",
-    keywords: [/\b(pollo|pechuga|muslo|alas?|filete|carne\s+de\s+res|carne\s+molida|bistec|costilla|chuleta|lomo|cerdo|puerco|chorizo|salchicha|jamón|jamon|tocino|bacon|mortadela|salami|pepperoni|mariscos?|camarones?|langosta|cangrejo|pescado|salmón|salmon|tilapia|mojarra|bagre|atún|tuna|sardinas?|calamares?|pulpo)\b/i],
+    unigrams: ["pollo","pechuga","muslo","filete","bistec","costilla","chuleta","lomo","cerdo","puerco","chorizo","salchicha","jamon","tocino","bacon","mortadela","salami","pepperoni","marisco","camaron","langosta","cangrejo","pescado","salmon","tilapia","mojarra","bagre","atun","tuna","sardina","calamar","pulpo"],
+    bigrams: ["carne res","carne molida","carne cerdo","filete salmon","filete tilapia","pollo entero"],
   },
   {
     label: "Lácteos y Huevos", icon: "🥛",
-    keywords: [/\b(leche|queso|yogur|yogurt|crema\s+(ácida|acida|de\s+leche)|mantequilla|margarina|butter|huevos?)\b/i],
+    unigrams: ["leche","queso","yogur","yogurt","mantequilla","margarina","butter","huevo","huevos","crema","lacto"],
+    bigrams: ["queso rallado","queso crema","queso fresco","queso cheddar","queso parmesano","queso mozzarella","crema acida","crema agria","leche descremada","leche entera","leche deslactosada","yogurt griego","yogurt natural","palitos queso"],
   },
   {
     label: "Pan y Tortillas", icon: "🍞",
-    keywords: [/\b(pan\b|tortillas?|baguette|bollos?|croissant|brioche|pita|wraps?|chapatas?)\b/i],
+    unigrams: ["tortilla","baguette","bollo","croissant","brioche","waffle","waffles","biscocho","pan"],
+    bigrams: ["pan molde","pan integral","pan dulce","pan artesanal","tortilla trigo","tortilla maiz","tortilla harina"],
   },
   {
     label: "Granos y Pasta", icon: "🌾",
-    keywords: [/\b(arroz|frijoles?|lentejas?|garbanzos?|habas?|soya|harina|pasta\b|espagueti|spaghetti|fideos?|macarrones?|cereal|avena|granola|quinoa|trigo|cebada)\b/i],
+    unigrams: ["arroz","frijol","frijoles","lenteja","garbanzo","harina","pasta","espagueti","spaghetti","fideos","macarron","cereal","avena","granola","quinoa","cebada","trigo","amaranto"],
+    bigrams: ["pasta dental","pasta tomate"],
   },
   {
     label: "Enlatados y Conservas", icon: "🥫",
-    keywords: [/\b(atún\s+en\s+lata|atun\s+en\s+lata|sardinas?\s+en|spam|conservas?|enlatados?|frijoles?\s+(refritos|negros|rojos)\s+en\s+lata|pasta\s+de\s+tomate|tomate\s+de\s+lata)\b/i],
+    unigrams: ["sardina","spam","conserva","enlatado"],
+    bigrams: ["atun lata","atun agua","pasta tomate","tomate lata","frijoles lata","frijoles refritos","sardinas lata"],
   },
   {
     label: "Condimentos y Salsas", icon: "🧂",
-    keywords: [/\b(sal\b|sal\s+(de|marina)|pimienta|azúcar|azucar|aceite\b|vinagre|salsa\b|salsas?|ketchup|mayonesa|mostaza|soya\b|worcestershire|tabasco|picante|sazonador|condimento|especias?|canela|orégano|oregano|comino|consomé|consome|sopita|maggi|adobo|recado|sofrito|crema\s+(de\s+coco|de\s+cacahuate))\b/i],
+    unigrams: ["pimienta","azucar","vinagre","ketchup","mayonesa","mostaza","worcestershire","tabasco","sazonador","condimento","canela","oregano","comino","consome","maggi","adobo","recado","sofrito","miel","salsa","aceite"],
+    bigrams: ["salsa tomate","salsa soya","salsa inglesa","aceite oliva","aceite vegetal","aceite coco","sal marina","sal mesa","azucar morena","azucar blanca","pimienta negra"],
   },
   {
     label: "Snacks y Dulces", icon: "🍿",
-    keywords: [/\b(papas\s+fritas|platanitos|frituras?|maní|mani|nueces?|almendras?|pistaches?|chocolates?|dulces?|caramelos?|gomitas?|galletas?\b|barritas?|chips\b|snacks?|palomitas?|popcorn|nachos|doritos|ruffles|cheetos)\b/i],
+    unigrams: ["platanitos","frituras","mani","nuez","nueces","almendra","pistache","chocolate","dulce","caramelo","gomitas","galletas","galleta","barrita","chips","snack","palomitas","popcorn","nachos","doritos","ruffles","cheetos","pretzel","brownie"],
+    bigrams: ["papas fritas","papas francesa","palomitas maiz"],
   },
   {
     label: "Bebidas", icon: "🧃",
-    keywords: [/\b(jugo|refresco|soda\b|gaseosa|agua\s+(de|con|mineral|pura)?|café\b|cafe\b|tés?|te\b|bebidas?|néctar|nectar|limonada|horchata|energizante|cerveza|vino\b|licor|whisky|ron\b|vodka|leche\s+de\s+(soya|almendra|coco))\b/i],
+    unigrams: ["jugo","refresco","soda","gaseosa","cafe","limonada","horchata","energizante","cerveza","vino","licor","whisky","vodka","nectar","bebida","capuchino","latte","expreso"],
+    bigrams: ["agua mineral","agua purificada","agua coco","cafe molido","cafe tostado","te verde","te negro","jugo naranja","jugo manzana","leche soya","leche almendra","leche coco"],
   },
   {
     label: "Congelados", icon: "🧊",
-    keywords: [/\b(congelados?|helados?|ice\s+cream|frozen|nuggets?|pizza\s+congelada|waffles?|fries\b|papas\s+a\s+la\s+francesa)\b/i],
+    unigrams: ["helado","nuggets","waffles","frozen","congelado"],
+    bigrams: ["ice cream","papas francesa","pizza congelada","pollo congelado","carne congelada"],
   },
   {
     label: "Limpieza del Hogar", icon: "🧹",
-    keywords: [/\b(detergente|suavizante|cloro|blanqueador|limpiador|desinfectante|fabuloso|ajax\b|axion|lava\s*trastes?|lavaplatos|escoba|trapeador|mopa\b|papel\s+toalla|bolsa(s)?\s+(de\s+)?basura|esponjas?|fibra\s+(de\s+acero)?|trapos?|jergas?|guantes?\s+de\s+hule|plumeros?|ambientador|aromatizante)\b/i],
+    unigrams: ["detergente","suavizante","cloro","blanqueador","limpiador","desinfectante","fabuloso","escoba","trapeador","esponja","ambientador","aromatizante","insecticida","lysol","axion","ajax"],
+    bigrams: ["lava trastes","papel toalla","bolsa basura","guantes hule","fibra acero","cera pisos"],
   },
   {
     label: "Higiene Personal", icon: "🧴",
-    keywords: [/\b(shampoo|champú|champu|acondicionador|jabón\s+(de\s+baño|corporal|líquido)?|jabon\b|pasta\s+dental|cepillo\s+dental|hilo\s+dental|enjuague\s+bucal|desodorante|antitranspirante|papel\s+higiénico|papel\s+higienico|servilletas?|toallas?\s+(húmedas|higienicas|sanitar)|pañales?|panales?|tampones?|toallitas?|rasuradoras?|rastrillos?|espuma\s+de\s+afeitar|loción|locion|crema\s+corporal|perfume|colonia\b|bloqueador|protector\s+solar)\b/i],
+    unigrams: ["shampoo","champu","acondicionador","desodorante","antitranspirante","jabon","pañal","panal","tampon","rasurador","rastrillos","bloqueador","locion","perfume","colonia"],
+    bigrams: ["pasta dental","cepillo dental","hilo dental","enjuague bucal","papel higienico","toallas femeninas","toallas humedas","toallas sanitarias","toallitas humedas","crema corporal","crema manos","protector solar","espuma afeitar","jabón corporal","jabón baño"],
   },
-  { label: "Otros", icon: "📦", keywords: [] },
 ];
 
-function classifyItem(name: string): { label: string; icon: string } {
-  for (const cat of GROCERY_CATEGORIES.slice(0, -1)) {
-    if (cat.keywords.some((re) => re.test(name))) {
-      return { label: cat.label, icon: cat.icon };
-    }
+// Build lookup index at module init time: normalized token → { label, icon }
+type CatInfo = { label: string; icon: string };
+const UNIGRAM_MAP = new Map<string, CatInfo>();
+const BIGRAM_MAP  = new Map<string, CatInfo>();
+for (const cat of CAT_DEFS) {
+  const info: CatInfo = { label: cat.label, icon: cat.icon };
+  for (const w of cat.unigrams) UNIGRAM_MAP.set(normStr(w), info);
+  for (const b of cat.bigrams)  BIGRAM_MAP.set(normStr(b), info);
+}
+
+// All canonical category labels in display order (for sorting groups)
+const CAT_ORDER = CAT_DEFS.map((c) => c.label);
+
+function classifyItem(name: string): CatInfo {
+  const tokens = tokenize(name);
+  // Check bigrams first (more specific)
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const bg = tokens[i] + " " + tokens[i + 1];
+    const hit = BIGRAM_MAP.get(bg);
+    if (hit) return hit;
+  }
+  // Then unigrams
+  for (const t of tokens) {
+    const hit = UNIGRAM_MAP.get(t);
+    if (hit) return hit;
   }
   return { label: "Otros", icon: "📦" };
 }
@@ -714,7 +765,7 @@ function ItemGroups({ items, viewMode }: { items: ShoppingListItemRow[]; viewMod
       byCategory.get(label)!.items.push(item);
     }
     // Sort groups following GROCERY_CATEGORIES order, then alphabetically for unknowns
-    const catOrder = GROCERY_CATEGORIES.map((c) => c.label);
+    const catOrder = CAT_ORDER;
     const groups = [...byCategory.entries()].sort(
       ([a], [b]) => {
         const ia = catOrder.indexOf(a);
