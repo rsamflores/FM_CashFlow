@@ -264,8 +264,10 @@ async function fetchPricesmartByUrl(url: URL): Promise<ProductHit | { error: str
       .join(" ");
   }
 
-  // Helper: one Bloomreach keyword search, returns { name, image } or null
-  async function brLookup(q: string): Promise<{ name: string; image: string | null } | null> {
+  // ── Step 1: Bloomreach exact-filter by pid field (fq=pid:X) ──────────────
+  // This is more reliable than keyword search because it queries the indexed
+  // field directly — the numeric PID doesn't appear in titles so keyword fails.
+  async function brByPid(): Promise<{ name: string; image: string | null } | null> {
     const params = new URLSearchParams({
       account_id: BR_ACCOUNT_ID,
       domain_key: BR_DOMAIN_KEY,
@@ -273,7 +275,44 @@ async function fetchPricesmartByUrl(url: URL): Promise<ProductHit | { error: str
       catalog_views: BR_CATALOG_VIEWS,
       request_type: "search",
       search_type: "keyword",
-      q,
+      q: "*",
+      fq: `pid:${pid}`,
+      fl: "pid,title,thumb_image",
+      rows: "1",
+      url: "https://www.pricesmart.com/es-sv/",
+      ref_url: "https://www.pricesmart.com/es-sv/",
+    });
+    const ctrl = new AbortController();
+    const tmo = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(`https://core.dxpapi.com/api/v1/core/?${params}`, {
+        headers: { "User-Agent": UA, Accept: "application/json" },
+        signal: ctrl.signal,
+      });
+      if (!res.ok) return null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data: any = await res.json();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const docs: any[] = data?.response?.docs ?? [];
+      if (!docs.length) return null;
+      const doc = docs[0];
+      const name = String(doc?.title ?? "").trim();
+      const image: string | null = doc?.thumb_image ? String(doc.thumb_image) : null;
+      return name ? { name, image } : null;
+    } catch { return null; }
+    finally { clearTimeout(tmo); }
+  }
+
+  // ── Step 2: Bloomreach keyword search with slug-derived terms ─────────────
+  async function brByKeywords(kw: string): Promise<{ name: string; image: string | null } | null> {
+    const params = new URLSearchParams({
+      account_id: BR_ACCOUNT_ID,
+      domain_key: BR_DOMAIN_KEY,
+      auth_key: BR_AUTH_KEY,
+      catalog_views: BR_CATALOG_VIEWS,
+      request_type: "search",
+      search_type: "keyword",
+      q: kw,
       fl: "pid,title,thumb_image",
       rows: "5",
       url: "https://www.pricesmart.com/es-sv/",
@@ -292,57 +331,76 @@ async function fetchPricesmartByUrl(url: URL): Promise<ProductHit | { error: str
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const docs: any[] = data?.response?.docs ?? [];
       if (!docs.length) return null;
-      // Prefer exact pid match; fall back to first result
+      // Prefer pid match, then first doc that has an image, then docs[0]
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const doc = docs.find((d: any) => String(d?.pid) === pid) ?? docs[0];
+      const doc =
+        docs.find((d: any) => String(d?.pid) === pid) ??
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        docs.find((d: any) => d?.thumb_image) ??
+        docs[0];
       const name = String(doc?.title ?? "").trim();
       const image: string | null = doc?.thumb_image ? String(doc.thumb_image) : null;
       return name ? { name, image } : null;
-    } catch {
-      return null;
-    } finally {
-      clearTimeout(tmo);
-    }
+    } catch { return null; }
+    finally { clearTimeout(tmo); }
   }
 
-  // Try Bloomreach by PID first; if not found, try by slug-derived keywords
-  let brResult = await brLookup(pid);
-  if (!brResult && slugName) {
-    // Use first 4 significant words of the slug name for a keyword search
-    const keywords = slugName.split(" ").slice(0, 4).join(" ");
-    brResult = await brLookup(keywords);
+  let brResult = await brByPid();
+  if (!brResult || !brResult.image) {
+    // Keyword fallback using first 4 slug words (lowercase for better matching)
+    const slugWords = slugName.toLowerCase().split(" ").filter(Boolean).slice(0, 4).join(" ");
+    if (slugWords) {
+      const kw = await brByKeywords(slugWords);
+      if (!brResult) brResult = kw;
+      else if (!brResult.image && kw?.image) brResult = { ...brResult, image: kw.image };
+    }
   }
 
   let name = brResult?.name ?? (slugName || `Producto PriceSmart #${pid}`);
   let image: string | null = brResult?.image ?? null;
 
-  // If still no image, extract og:image from the product page HTML.
-  // PriceSmart uses Nuxt SSR so og:image is in the initial <head>.
+  // ── Step 3: og:image from the product page HTML ───────────────────────────
+  // PriceSmart uses Nuxt 2 SSR — og:image is server-rendered in <head>.
+  // We fetch the page and search the first 20 KB for the meta tag.
   if (!image) {
     const ogCtrl = new AbortController();
     const ogTmo = setTimeout(() => ogCtrl.abort(), SEARCH_TIMEOUT_MS);
     try {
       const pageRes = await fetch(url.href, {
-        headers: { "User-Agent": UA, Accept: "text/html" },
+        headers: {
+          "User-Agent": UA,
+          Accept: "text/html,application/xhtml+xml",
+          "Accept-Language": "es-SV,es;q=0.9",
+        },
         signal: ogCtrl.signal,
       });
       if (pageRes.ok) {
-        // Read only the first 8 KB — og:image is always in the <head>
+        // Read up to 20 KB — enough to capture the full <head>
         const reader = pageRes.body?.getReader();
-        let chunk = "";
+        const chunks: Uint8Array[] = [];
+        let totalBytes = 0;
         if (reader) {
-          const { value } = await reader.read();
+          while (totalBytes < 20_000) {
+            const { done, value } = await reader.read();
+            if (done || !value) break;
+            chunks.push(value);
+            totalBytes += value.byteLength;
+          }
           reader.cancel();
-          chunk = new TextDecoder().decode(value);
         }
-        const match = chunk.match(/property="og:image"\s+content="([^"]+)"/);
-        if (!match) {
-          // Try alternate attribute order
-          const match2 = chunk.match(/content="([^"]+)"\s+property="og:image"/);
-          if (match2) image = match2[1];
-        } else {
-          image = match[1];
-        }
+        const html = new TextDecoder().decode(
+          chunks.reduce((acc, c) => {
+            const merged = new Uint8Array(acc.length + c.length);
+            merged.set(acc);
+            merged.set(c, acc.length);
+            return merged;
+          }, new Uint8Array(0)),
+        );
+        // Match either attribute order in the meta tag
+        const ogMatch =
+          html.match(/property="og:image"\s+content="([^"]+)"/) ??
+          html.match(/content="([^"]+)"\s+property="og:image"/);
+        if (ogMatch?.[1]) image = ogMatch[1];
       }
     } catch { /* image stays null */ }
     finally { clearTimeout(ogTmo); }
