@@ -10,6 +10,7 @@ import {
   updateItem,
   toggleItemChecked,
   searchProducts,
+  fetchProductFromUrl,
   type ShoppingListRow,
   type ShoppingListItemRow,
   type Suggestion,
@@ -224,24 +225,53 @@ function BudgetCard({
 // Search panel — Walmart + PriceSmart lookup + manual add
 // ─────────────────────────────────────────────────────────────────────────────
 
+function isProductUrl(q: string) {
+  return /^https?:\/\//i.test(q.trim());
+}
+function detectStoreFromUrl(q: string): "walmart" | "pricesmart" | null {
+  if (/walmart\.com\.sv/i.test(q)) return "walmart";
+  if (/pricesmart\.com/i.test(q)) return "pricesmart";
+  return null;
+}
+
 function SearchPanel({ listId }: { listId: string }) {
   const [query, setQuery] = useState("");
   const [searchStore, setSearchStore] = useState<"walmart" | "pricesmart">("walmart");
   const [results, setResults] = useState<ProductHit[]>([]);
+  const [urlResult, setUrlResult] = useState<ProductHit | null>(null);
+  const [urlError, setUrlError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [pending, startTransition] = useTransition();
   const [manualOpen, setManualOpen] = useState(false);
 
+  const urlMode = isProductUrl(query);
+  const detectedStore = urlMode ? detectStoreFromUrl(query) : null;
+
+  function resetResults() {
+    setResults([]);
+    setUrlResult(null);
+    setUrlError(null);
+    setSearched(false);
+  }
+
   async function runSearch(store: "walmart" | "pricesmart" = searchStore) {
     const q = query.trim();
     if (!q) return;
     setLoading(true);
-    setSearched(false);
-    setResults([]);
+    resetResults();
     try {
-      const hits = await searchProducts(store, q);
-      setResults(hits);
+      if (urlMode) {
+        const res = await fetchProductFromUrl(q);
+        if ("error" in res) {
+          setUrlError(res.error);
+        } else {
+          setUrlResult(res);
+        }
+      } else {
+        const hits = await searchProducts(store, q);
+        setResults(hits);
+      }
       setSearched(true);
     } finally {
       setLoading(false);
@@ -250,8 +280,7 @@ function SearchPanel({ listId }: { listId: string }) {
 
   function switchStore(store: "walmart" | "pricesmart") {
     setSearchStore(store);
-    setResults([]);
-    setSearched(false);
+    resetResults();
   }
 
   function addHit(h: ProductHit) {
@@ -266,12 +295,17 @@ function SearchPanel({ listId }: { listId: string }) {
         product_url: h.product_url ?? undefined,
         external_id: h.external_id ?? undefined,
       });
+      setUrlResult(null);
+      setQuery("");
+      setSearched(false);
     });
   }
 
+  const activeStore = urlMode ? (detectedStore ?? searchStore) : searchStore;
+
   return (
     <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low p-md flex flex-col gap-sm">
-      {/* Store toggle + manual add */}
+      {/* Header */}
       <div className="flex items-center gap-sm flex-wrap">
         <span className="material-symbols-outlined" style={{ fontSize: 18, color: "var(--color-primary)" }}>
           search
@@ -287,66 +321,123 @@ function SearchPanel({ listId }: { listId: string }) {
         </button>
       </div>
 
-      {/* Store selector */}
-      <div className="flex gap-xs">
-        <button
-          type="button"
-          onClick={() => switchStore("walmart")}
-          className="h-8 px-md rounded-full text-body-sm font-bold transition-colors flex items-center gap-xs"
-          style={{
-            background: searchStore === "walmart" ? STORE_COLOR.walmart : "var(--color-surface-container-high)",
-            color: searchStore === "walmart" ? "#fff" : "var(--color-on-surface-variant)",
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>shopping_cart</span>
-          Walmart
-        </button>
-        <button
-          type="button"
-          onClick={() => switchStore("pricesmart")}
-          className="h-8 px-md rounded-full text-body-sm font-bold transition-colors flex items-center gap-xs"
-          style={{
-            background: searchStore === "pricesmart" ? STORE_COLOR.pricesmart : "var(--color-surface-container-high)",
-            color: searchStore === "pricesmart" ? "#fff" : "var(--color-on-surface-variant)",
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>store</span>
-          PriceSmart
-        </button>
-      </div>
+      {/* Store selector — oculto cuando hay URL pegada */}
+      {!urlMode && (
+        <div className="flex gap-xs">
+          <button
+            type="button"
+            onClick={() => switchStore("walmart")}
+            className="h-8 px-md rounded-full text-body-sm font-bold transition-colors flex items-center gap-xs"
+            style={{
+              background: searchStore === "walmart" ? STORE_COLOR.walmart : "var(--color-surface-container-high)",
+              color: searchStore === "walmart" ? "#fff" : "var(--color-on-surface-variant)",
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>shopping_cart</span>
+            Walmart
+          </button>
+          <button
+            type="button"
+            onClick={() => switchStore("pricesmart")}
+            className="h-8 px-md rounded-full text-body-sm font-bold transition-colors flex items-center gap-xs"
+            style={{
+              background: searchStore === "pricesmart" ? STORE_COLOR.pricesmart : "var(--color-surface-container-high)",
+              color: searchStore === "pricesmart" ? "#fff" : "var(--color-on-surface-variant)",
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>store</span>
+            PriceSmart
+          </button>
+        </div>
+      )}
 
-      {/* Search input */}
+      {/* Chip de URL detectada */}
+      {urlMode && (
+        <div className="flex items-center gap-xs">
+          <span
+            className="flex items-center gap-xs h-7 px-sm rounded-full text-label-md font-bold text-white"
+            style={{ background: detectedStore ? STORE_COLOR[detectedStore] : "var(--color-tertiary)" }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>link</span>
+            {detectedStore === "walmart" && "Enlace de Walmart SV"}
+            {detectedStore === "pricesmart" && "Enlace de PriceSmart"}
+            {!detectedStore && "Enlace no reconocido"}
+          </span>
+        </div>
+      )}
+
+      {/* Input + botón */}
       <div className="flex items-center gap-sm">
         <input
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              runSearch();
-            }
-          }}
-          placeholder={searchStore === "walmart" ? "leche, huevos, papel higiénico…" : "busca en PriceSmart SV…"}
+          onChange={(e) => { setQuery(e.target.value); resetResults(); }}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); runSearch(); } }}
+          placeholder="Busca por nombre o pega un enlace de Walmart / PriceSmart…"
           className="flex-1 h-10 px-md rounded-lg bg-surface-container text-on-surface text-body-sm focus:ring-2 focus:ring-primary-container outline-none border-none"
         />
         <button
           type="button"
-          disabled={loading}
+          disabled={loading || (urlMode && !detectedStore)}
           onClick={() => runSearch()}
-          className="h-10 px-md rounded-full font-bold text-body-sm disabled:opacity-50 text-white"
-          style={{ background: STORE_COLOR[searchStore] }}
+          className="h-10 px-md rounded-full font-bold text-body-sm disabled:opacity-50 text-white shrink-0"
+          style={{ background: STORE_COLOR[activeStore] }}
         >
           {loading ? "Buscando…" : "Buscar"}
         </button>
       </div>
 
-      {searched && results.length === 0 && !loading && (
+      {/* Error de URL */}
+      {urlError && (
+        <p className="text-label-md text-error">{urlError}</p>
+      )}
+
+      {/* Sin resultados */}
+      {searched && !urlMode && results.length === 0 && !loading && (
         <p className="text-label-md text-on-surface-variant">
           Sin resultados. Usa &quot;Añadir manual&quot; o intenta otra búsqueda.
         </p>
       )}
 
+      {/* Resultado de URL — tarjeta grande única */}
+      {urlResult && (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => addHit(urlResult)}
+          className="text-left rounded-xl border-2 bg-surface-container hover:bg-surface-container-high transition-colors p-md flex gap-md disabled:opacity-50"
+          style={{ borderColor: STORE_COLOR[urlResult.store] + "60" }}
+        >
+          {urlResult.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={urlResult.image_url}
+              alt={urlResult.name}
+              className="w-20 h-20 object-contain rounded-lg bg-white shrink-0"
+            />
+          ) : (
+            <div className="w-20 h-20 rounded-lg bg-surface-container-highest flex items-center justify-center shrink-0">
+              <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: 32 }}>image</span>
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-body-sm font-bold text-on-surface">{urlResult.name}</p>
+            {urlResult.price > 0 ? (
+              <p className="text-title-sm font-bold mt-xs" style={{ color: STORE_COLOR[urlResult.store] }}>
+                {formatCurrency(urlResult.price)}
+              </p>
+            ) : (
+              <p className="text-label-md text-on-surface-variant mt-xs italic">Precio no disponible — editable en la lista</p>
+            )}
+            <p className="text-label-md text-on-surface-variant mt-xs flex items-center gap-xs">
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>add_circle</span>
+              Toca para añadir a la lista
+            </p>
+          </div>
+        </button>
+      )}
+
+      {/* Resultados de búsqueda por texto */}
       {results.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-sm">
           {results.map((h) => (
@@ -359,17 +450,10 @@ function SearchPanel({ listId }: { listId: string }) {
             >
               {h.image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={h.image_url}
-                  alt={h.name}
-                  className="w-16 h-16 object-contain rounded-md bg-white shrink-0"
-                  loading="lazy"
-                />
+                <img src={h.image_url} alt={h.name} className="w-16 h-16 object-contain rounded-md bg-white shrink-0" loading="lazy" />
               ) : (
                 <div className="w-16 h-16 rounded-md bg-surface-container-highest flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: 24 }}>
-                    image
-                  </span>
+                  <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: 24 }}>image</span>
                 </div>
               )}
               <div className="flex-1 min-w-0">

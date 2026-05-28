@@ -154,6 +154,142 @@ export async function searchProducts(
   return hits;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Lookup por URL de producto (Walmart SV / PriceSmart)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function fetchProductFromUrl(
+  rawUrl: string,
+): Promise<ProductHit | { error: string }> {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl.trim());
+  } catch {
+    return { error: "URL inválida" };
+  }
+
+  if (parsed.hostname.includes("walmart.com.sv")) {
+    return fetchWalmartByUrl(parsed);
+  }
+  if (parsed.hostname.includes("pricesmart.com")) {
+    return fetchPricesmartByUrl(parsed);
+  }
+  return { error: "Solo se admiten enlaces de Walmart SV (walmart.com.sv) y PriceSmart (pricesmart.com)" };
+}
+
+/** Walmart: /[slug]/p  → VTEX catalog search by slug */
+async function fetchWalmartByUrl(url: URL): Promise<ProductHit | { error: string }> {
+  // path: /pollo-empanizado-460-gr-pollo-indio-8/p  → slug before /p
+  const parts = url.pathname.replace(/\/$/, "").split("/").filter(Boolean);
+  const pIdx = parts.lastIndexOf("p");
+  const slug = pIdx > 0 ? parts[pIdx - 1] : parts[parts.length - 1];
+  if (!slug) return { error: "No se encontró el identificador del producto en el enlace" };
+
+  const apiUrl = `https://www.walmart.com.sv/api/catalog_system/pub/products/search/${encodeURIComponent(slug)}`;
+  const ctrl = new AbortController();
+  const tmo = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(apiUrl, {
+      headers: { "User-Agent": UA, Accept: "application/json" },
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return { error: "No se pudo obtener el producto de Walmart" };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: any[] = await res.json();
+    if (!Array.isArray(data) || data.length === 0)
+      return { error: "Producto no encontrado en Walmart SV" };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const p = data[0] as any;
+    const id = String(p?.productId ?? "");
+    const name = String(p?.productName ?? "").trim();
+    if (!name) return { error: "Producto no encontrado" };
+
+    const item0 = Array.isArray(p?.items) ? p.items[0] : null;
+    const seller0 = Array.isArray(item0?.sellers) ? item0.sellers[0] : null;
+    const offer = seller0?.commertialOffer;
+    let price = 0;
+    if (offer?.Price > 0) price = Number(offer.Price);
+    else if (offer?.ListPrice > 0) price = Number(offer.ListPrice);
+
+    const imgs = Array.isArray(item0?.images) ? item0.images : [];
+    const image: string | null = imgs[0]?.imageUrl ? String(imgs[0].imageUrl) : null;
+    const link = String(p?.link ?? url.href);
+
+    return { store: "walmart", external_id: id, name, price, image_url: image, product_url: link };
+  } catch {
+    return { error: "Error al obtener el producto de Walmart" };
+  } finally {
+    clearTimeout(tmo);
+  }
+}
+
+/** PriceSmart: /es-sv/p/[pid]  → Bloomreach (name+image) + CT (price) */
+async function fetchPricesmartByUrl(url: URL): Promise<ProductHit | { error: string }> {
+  const match = url.pathname.match(/\/p\/(\d+)/);
+  if (!match) return { error: "No se encontró el identificador del producto en el enlace" };
+  const pid = match[1];
+
+  // Bloomreach: buscar por PID como keyword para obtener nombre e imagen
+  const brParams = new URLSearchParams({
+    account_id: BR_ACCOUNT_ID,
+    domain_key: BR_DOMAIN_KEY,
+    auth_key: BR_AUTH_KEY,
+    catalog_views: BR_CATALOG_VIEWS,
+    request_type: "search",
+    search_type: "keyword",
+    q: pid,
+    fl: "pid,title,thumb_image",
+    rows: "3",
+    url: "https://www.pricesmart.com/es-sv/",
+    ref_url: "https://www.pricesmart.com/es-sv/",
+  });
+
+  const brCtrl = new AbortController();
+  const brTmo = setTimeout(() => brCtrl.abort(), SEARCH_TIMEOUT_MS);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let name = "";
+  let image: string | null = null;
+  try {
+    const res = await fetch(`https://core.dxpapi.com/api/v1/core/?${brParams}`, {
+      headers: { "User-Agent": UA, Accept: "application/json" },
+      signal: brCtrl.signal,
+    });
+    if (res.ok) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data: any = await res.json();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const doc = (data?.response?.docs as any[])?.find((d: any) => String(d?.pid) === pid);
+      if (doc) {
+        name = String(doc.title ?? "").trim();
+        image = doc.thumb_image ? String(doc.thumb_image) : null;
+      }
+    }
+  } catch { /* fallback: name stays empty, price still fetched */ }
+  finally { clearTimeout(brTmo); }
+
+  if (!name) name = `Producto PriceSmart #${pid}`;
+
+  // CT: precio en USD para El Salvador
+  let price = 0;
+  try {
+    const token = await getPricesmartCTToken();
+    if (token) {
+      const prices = await fetchCTPrices([pid], token);
+      price = prices[pid] ?? 0;
+    }
+  } catch { /* price stays 0, user can edit */ }
+
+  return {
+    store: "pricesmart",
+    external_id: pid,
+    name,
+    price,
+    image_url: image,
+    product_url: `https://www.pricesmart.com/es-sv/p/${pid}`,
+  };
+}
+
 async function scrapeWalmart(query: string): Promise<ProductHit[]> {
   // VTEX public catalog API — entrega JSON limpio sin autenticación
   const url =
