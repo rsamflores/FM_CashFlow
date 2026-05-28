@@ -316,6 +316,38 @@ async function fetchPricesmartByUrl(url: URL): Promise<ProductHit | { error: str
   let name = brResult?.name ?? (slugName || `Producto PriceSmart #${pid}`);
   let image: string | null = brResult?.image ?? null;
 
+  // If still no image, extract og:image from the product page HTML.
+  // PriceSmart uses Nuxt SSR so og:image is in the initial <head>.
+  if (!image) {
+    const ogCtrl = new AbortController();
+    const ogTmo = setTimeout(() => ogCtrl.abort(), SEARCH_TIMEOUT_MS);
+    try {
+      const pageRes = await fetch(url.href, {
+        headers: { "User-Agent": UA, Accept: "text/html" },
+        signal: ogCtrl.signal,
+      });
+      if (pageRes.ok) {
+        // Read only the first 8 KB — og:image is always in the <head>
+        const reader = pageRes.body?.getReader();
+        let chunk = "";
+        if (reader) {
+          const { value } = await reader.read();
+          reader.cancel();
+          chunk = new TextDecoder().decode(value);
+        }
+        const match = chunk.match(/property="og:image"\s+content="([^"]+)"/);
+        if (!match) {
+          // Try alternate attribute order
+          const match2 = chunk.match(/content="([^"]+)"\s+property="og:image"/);
+          if (match2) image = match2[1];
+        } else {
+          image = match[1];
+        }
+      }
+    } catch { /* image stays null */ }
+    finally { clearTimeout(ogTmo); }
+  }
+
   // CT: precio en USD para El Salvador
   let price = 0;
   try {
