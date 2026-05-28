@@ -433,7 +433,22 @@ export async function ensureActiveList(): Promise<{ id: string } | { error: stri
     })
     .select("id")
     .single();
-  if (insErr || !newList) return { error: insErr?.message ?? "No se pudo crear la lista" };
+
+  // Si falla por constraint único (ya existe una lista activa creada por otro usuario),
+  // reintentar el SELECT para devolver la lista existente.
+  if (insErr) {
+    if (insErr.code === "23505") {
+      const { data: retry } = await supabase
+        .from("shopping_lists")
+        .select("id")
+        .eq("scope", "personal")
+        .eq("status", "active")
+        .maybeSingle();
+      if (retry?.id) return { id: retry.id };
+    }
+    return { error: insErr.message };
+  }
+  if (!newList) return { error: "No se pudo crear la lista" };
 
   if (lastPurchased?.id) {
     const { data: prevItems } = await supabase
