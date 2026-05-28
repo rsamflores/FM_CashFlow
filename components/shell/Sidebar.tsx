@@ -8,14 +8,15 @@ import { ScopeSwitcher } from "./ScopeSwitcher";
 import { useSidebar } from "@/lib/sidebar-context";
 
 const NAV_ALL = [
-  { key: "dashboard",       label: "Dashboard",      icon: "dashboard",               recorderHide: true,  employeeHide: true },
-  { key: "transactions",    label: "Transacciones",  icon: "receipt_long",            recorderHide: false, employeeHide: true },
-  { key: "accounts",        label: "Cuentas",         icon: "account_balance",         recorderHide: true,  employeeHide: true },
-  { key: "categories",      label: "Categorías",      icon: "category",                recorderHide: true,  employeeHide: true },
-  { key: "budgets",         label: "Presupuestos",    icon: "account_balance_wallet",  recorderHide: true,  employeeHide: true },
-  { key: "recurring",       label: "Recurrentes",     icon: "event_repeat",            recorderHide: true,  employeeHide: true },
-  { key: "reimbursements",  label: "Reembolsos",      icon: "payments",                recorderHide: true,  employeeHide: false },
-  { key: "reports",         label: "Reportes",        icon: "analytics",               recorderHide: true,  employeeHide: true },
+  { key: "dashboard",       label: "Dashboard",      icon: "dashboard",               recorderHide: true,  employeeHide: true,  personalOnly: false },
+  { key: "transactions",    label: "Transacciones",  icon: "receipt_long",            recorderHide: false, employeeHide: true,  personalOnly: false },
+  { key: "mercado",         label: "Mercado",         icon: "shopping_cart",           recorderHide: true,  employeeHide: true,  personalOnly: true  },
+  { key: "accounts",        label: "Cuentas",         icon: "account_balance",         recorderHide: true,  employeeHide: true,  personalOnly: false },
+  { key: "categories",      label: "Categorías",      icon: "category",                recorderHide: true,  employeeHide: true,  personalOnly: false },
+  { key: "budgets",         label: "Presupuestos",    icon: "account_balance_wallet",  recorderHide: true,  employeeHide: true,  personalOnly: false },
+  { key: "recurring",       label: "Recurrentes",     icon: "event_repeat",            recorderHide: true,  employeeHide: true,  personalOnly: false },
+  { key: "reimbursements",  label: "Reembolsos",      icon: "payments",                recorderHide: true,  employeeHide: false, personalOnly: false },
+  { key: "reports",         label: "Reportes",        icon: "analytics",               recorderHide: true,  employeeHide: true,  personalOnly: false },
 ] as const;
 
 const EMPLOYEE_NAV = [
@@ -33,7 +34,11 @@ export function Sidebar({ scope, userRole }: Props) {
   const isEmployee = userRole === "employee";
   const NAV = isEmployee
     ? EMPLOYEE_NAV
-    : NAV_ALL.filter((item) => !isRecorder || !item.recorderHide);
+    : NAV_ALL.filter(
+        (item) =>
+          (!isRecorder || !item.recorderHide) &&
+          (!item.personalOnly || scope === "personal"),
+      );
 
   const inner = (
     <aside
