@@ -392,11 +392,13 @@ function BudgetCard({
           </span>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-body-sm font-bold text-on-surface">{STORE_LABEL[store]}</p>
-          <p className="text-label-md text-on-surface-variant">
-            Presupuesto: <span className="font-bold">{snap.category_name}</span>
+          <p className="text-body-sm font-bold text-on-surface">{snap.category_name}</p>
+          <p className="text-label-md text-on-surface-variant flex items-center gap-xs flex-wrap">
+            {store === "walmart"
+              ? "Walmart · Agromercado · otros"
+              : STORE_LABEL[store]}
             {!snap.category_id && (
-              <span className="ml-xs text-error">(crea esta categoría para activar comparación)</span>
+              <span className="text-error">(crea esta categoría para activar comparación)</span>
             )}
           </p>
         </div>

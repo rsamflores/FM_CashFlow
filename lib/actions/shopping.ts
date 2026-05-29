@@ -803,9 +803,11 @@ async function buildStoreBudget(
   const supabase = await createClient();
   const targetName = STORE_BUDGET_CATEGORY[store];
 
-  // Suma de items de esa tienda en la lista activa
+  // Suma de items que afectan este presupuesto:
+  // - PriceSmart: solo ítems de PriceSmart
+  // - Supermercado (walmart): todo lo que NO es PriceSmart (walmart + agromercado + dollarcity + manual)
   const list_total = items
-    .filter((i) => i.store === store)
+    .filter((i) => store === "pricesmart" ? i.store === "pricesmart" : i.store !== "pricesmart")
     .reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0);
 
   // Buscar categoría por nombre (case-insensitive) en scope personal
