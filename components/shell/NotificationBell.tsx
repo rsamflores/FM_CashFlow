@@ -15,6 +15,9 @@ const TYPE_ICON: Record<string, string> = {
   reimbursement_paid:      "check_circle",
   reimbursement_rejected:  "cancel",
   transaction_confirmed:   "task_alt",
+  price_up:                "trending_up",
+  price_down:              "trending_down",
+  price_change:            "sync_alt",
 };
 
 const TYPE_COLOR: Record<string, string> = {
@@ -22,6 +25,9 @@ const TYPE_COLOR: Record<string, string> = {
   reimbursement_paid:      "var(--color-secondary-fixed)",
   reimbursement_rejected:  "var(--color-error)",
   transaction_confirmed:   "var(--color-primary)",
+  price_up:                "var(--color-error)",
+  price_down:              "var(--color-secondary-fixed)",
+  price_change:            "var(--color-tertiary)",
 };
 
 export function NotificationBell() {

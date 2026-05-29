@@ -38,6 +38,8 @@ export type ShoppingListItemRow = {
   store: Store;
   quantity: number;
   unit_price: number;
+  prev_price: number | null;       // last price before automatic update
+  price_checked_at: string | null; // timestamp of last price fetch
   image_url: string | null;
   product_url: string | null;
   external_id: string | null;
@@ -1343,6 +1345,17 @@ export async function importItems(
  * - Funciona bien para alimentos comunes: "manzana", "leche", "pollo", etc.
  * - Retorna null si no se encuentra artículo o no tiene thumbnail.
  */
+/**
+ * Fetch the current live price for a product URL.
+ * Used by the daily price-update cron job.
+ * Returns null if the URL is unsupported, the fetch fails, or price is 0.
+ */
+export async function fetchCurrentPrice(productUrl: string): Promise<number | null> {
+  const result = await fetchProductFromUrl(productUrl);
+  if ("error" in result) return null;
+  return result.price > 0 ? result.price : null;
+}
+
 export async function fetchGenericImage(name: string): Promise<string | null> {
   const ctrl = new AbortController();
   const tmo = setTimeout(() => ctrl.abort(), 4000);

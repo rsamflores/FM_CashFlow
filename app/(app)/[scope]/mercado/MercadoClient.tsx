@@ -1142,6 +1142,28 @@ function CollapsibleStoreSection({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Price change badge
+// ─────────────────────────────────────────────────────────────────────────────
+
+function PriceBadge({ prev, current }: { prev: number; current: number }) {
+  const up    = current > prev;
+  const delta = Math.abs(current - prev);
+  const color = up ? "var(--color-error)" : "var(--color-secondary-fixed)";
+  return (
+    <span
+      className="inline-flex items-center gap-[2px] px-xs rounded-full font-bold"
+      style={{ background: color + "20", color, fontSize: 10 }}
+      title={`Precio anterior: $${prev.toFixed(2)}`}
+    >
+      <span className="material-symbols-outlined" style={{ fontSize: 11 }}>
+        {up ? "trending_up" : "trending_down"}
+      </span>
+      {up ? "+" : "-"}${delta.toFixed(2)}
+    </span>
+  );
+}
+
 function ItemRow({ item, showStoreBadge = false }: { item: ShoppingListItemRow; showStoreBadge?: boolean }) {
   const [qty, setQty] = useState(String(item.quantity));
   const [price, setPrice] = useState(String(item.unit_price));
@@ -1214,8 +1236,12 @@ function ItemRow({ item, showStoreBadge = false }: { item: ShoppingListItemRow; 
           >
             {item.name}
           </p>
-          <p className="text-label-md text-on-surface-variant flex items-center gap-xs">
+          <p className="text-label-md text-on-surface-variant flex items-center gap-xs flex-wrap">
             {formatCurrency(subtotal)}
+            {/* Price change badge — shown when cron detected a price move */}
+            {item.prev_price != null && Math.abs(Number(item.prev_price) - Number(item.unit_price)) >= 0.02 && (
+              <PriceBadge prev={Number(item.prev_price)} current={Number(item.unit_price)} />
+            )}
             {showStoreBadge && (
               <span
                 className="flex items-center gap-xs px-xs rounded-full"
