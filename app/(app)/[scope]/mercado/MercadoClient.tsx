@@ -502,10 +502,7 @@ function CategoryPieCharts({ items }: { items: ShoppingListItemRow[] }) {
   return (
     <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low p-md flex flex-col gap-md">
       <p className="text-label-md font-bold text-on-surface-variant">Distribución por tipo de producto</p>
-      <div
-        className="grid gap-lg"
-        style={{ gridTemplateColumns: hasSuper && hasPS ? "1fr 1fr" : "1fr" }}
-      >
+      <div className={hasSuper && hasPS ? "grid grid-cols-1 md:grid-cols-2 gap-lg" : "grid grid-cols-1 gap-lg"}>
         {hasSuper && (
           <PieChartPanel
             title="Supermercado"
@@ -540,52 +537,63 @@ function PieChartPanel({
 }) {
   const total = data.reduce((s, d) => s + d.value, 0);
   return (
-    <div className="flex flex-col gap-sm">
+    <div className="flex flex-col gap-xs">
+      {/* Store label */}
       <div>
         <p className="text-body-sm font-bold" style={{ color: storeColor }}>{title}</p>
         <p className="text-label-md text-on-surface-variant">{subtitle}</p>
       </div>
-      <div style={{ height: 160 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              innerRadius={45}
-              outerRadius={70}
-              paddingAngle={2}
-              dataKey="value"
-              nameKey="name"
-            >
-              {data.map((entry, i) => (
-                <Cell key={i} fill={entry.color} />
-              ))}
-            </Pie>
-            <Tooltip
-              formatter={(val) => [formatCurrency(Number(val)), ""]}
-              contentStyle={{
-                background: "var(--color-surface-container)",
-                border: "1px solid color-mix(in srgb, var(--color-outline-variant) 30%, transparent)",
-                borderRadius: 8,
-                fontSize: 12,
-                color: "var(--color-on-surface)",
-              }}
-            />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="flex flex-col gap-xs">
-        {data.map((d) => (
-          <div key={d.name} className="flex items-center gap-xs">
-            <div className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
-            <span className="text-label-md text-on-surface flex-1 truncate">{d.icon} {d.name}</span>
-            <span className="text-label-md font-bold text-on-surface shrink-0">{formatCurrency(d.value)}</span>
-            <span className="text-label-md text-on-surface-variant shrink-0" style={{ minWidth: 36, textAlign: "right" }}>
-              {Math.round((d.value / total) * 100)}%
-            </span>
-          </div>
-        ))}
+
+      {/* Horizontal: donut left, legend right */}
+      <div className="flex items-center gap-md">
+        {/* Donut — fixed square so it never gets squished */}
+        <div style={{ width: 120, height: 120, flexShrink: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                innerRadius={33}
+                outerRadius={54}
+                paddingAngle={2}
+                dataKey="value"
+                nameKey="name"
+              >
+                {data.map((entry, i) => (
+                  <Cell key={i} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip
+                formatter={(val) => [formatCurrency(Number(val)), ""]}
+                contentStyle={{
+                  background: "var(--color-surface-container)",
+                  border: "1px solid color-mix(in srgb, var(--color-outline-variant) 30%, transparent)",
+                  borderRadius: 8,
+                  fontSize: 12,
+                  color: "var(--color-on-surface)",
+                }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Legend — fills remaining width, truncates gracefully */}
+        <div className="flex flex-col gap-xs flex-1 min-w-0">
+          {data.map((d) => (
+            <div key={d.name} className="flex items-center gap-xs min-w-0">
+              <div className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
+              <span className="text-label-md text-on-surface flex-1 truncate min-w-0">{d.icon} {d.name}</span>
+              <span className="text-label-md font-bold text-on-surface shrink-0">{formatCurrency(d.value)}</span>
+              <span
+                className="text-label-md text-on-surface-variant shrink-0"
+                style={{ minWidth: 32, textAlign: "right" }}
+              >
+                {Math.round((d.value / total) * 100)}%
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
