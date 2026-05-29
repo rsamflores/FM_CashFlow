@@ -491,6 +491,7 @@ function buildPieData(items: ShoppingListItemRow[]): PieSlice[] {
 }
 
 function CategoryPieCharts({ items }: { items: ShoppingListItemRow[] }) {
+  const [open, setOpen] = useState(false);
   const superItems = items.filter((i) => i.store !== "pricesmart");
   const psItems    = items.filter((i) => i.store === "pricesmart");
   const superData  = buildPieData(superItems);
@@ -500,26 +501,47 @@ function CategoryPieCharts({ items }: { items: ShoppingListItemRow[] }) {
   if (!hasSuper && !hasPS) return null;
 
   return (
-    <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low p-md flex flex-col gap-md">
-      <p className="text-label-md font-bold text-on-surface-variant">Distribución por tipo de producto</p>
-      <div className={hasSuper && hasPS ? "grid grid-cols-1 md:grid-cols-2 gap-lg" : "grid grid-cols-1 gap-lg"}>
-        {hasSuper && (
-          <PieChartPanel
-            title="Supermercado"
-            subtitle="Walmart · Agromercado · otros"
-            storeColor={STORE_COLOR.walmart}
-            data={superData}
-          />
-        )}
-        {hasPS && (
-          <PieChartPanel
-            title="PriceSmart"
-            subtitle="PriceSmart"
-            storeColor={STORE_COLOR.pricesmart}
-            data={psData}
-          />
-        )}
-      </div>
+    <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-sm px-lg py-md hover:bg-surface-container transition-colors"
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 18, color: "var(--color-secondary)" }}>
+          donut_small
+        </span>
+        <p className="text-body-sm font-bold text-on-surface flex-1 text-left">
+          Distribución por tipo de producto
+        </p>
+        <span
+          className="material-symbols-outlined text-on-surface-variant transition-transform"
+          style={{ fontSize: 18, transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+        >
+          expand_more
+        </span>
+      </button>
+      {open && (
+        <div className="px-lg pb-lg pt-xs flex flex-col gap-md border-t border-outline-variant/10">
+          <div className={hasSuper && hasPS ? "grid grid-cols-1 md:grid-cols-2 gap-lg" : "grid grid-cols-1 gap-lg"}>
+            {hasSuper && (
+              <PieChartPanel
+                title="Supermercado"
+                subtitle="Walmart · Agromercado · otros"
+                storeColor={STORE_COLOR.walmart}
+                data={superData}
+              />
+            )}
+            {hasPS && (
+              <PieChartPanel
+                title="PriceSmart"
+                subtitle="PriceSmart"
+                storeColor={STORE_COLOR.pricesmart}
+                data={psData}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1019,24 +1041,12 @@ function ItemGroups({ items, viewMode }: { items: ShoppingListItemRow[]; viewMod
           const catGroups = sortCatGroups([...byCategory.entries()]);
 
           return (
-            <div
+            <CollapsibleStoreSection
               key={store}
-              className="rounded-2xl border overflow-hidden"
-              style={{ borderColor: STORE_COLOR[store] + "30" }}
+              store={store}
+              count={storeItems.length}
+              subtotal={storeSubtotal}
             >
-              {/* Store header */}
-              <div
-                className="px-lg py-sm flex items-center gap-sm"
-                style={{ background: STORE_COLOR[store] + "14" }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 18, color: STORE_COLOR[store] }}>
-                  {STORE_ICON[store]}
-                </span>
-                <h3 className="text-body-sm font-bold flex-1" style={{ color: STORE_COLOR[store] }}>
-                  {STORE_LABEL[store]} ({storeItems.length})
-                </h3>
-                <span className="text-body-sm font-bold text-on-surface">{formatCurrency(storeSubtotal)}</span>
-              </div>
               {/* Category sub-groups */}
               <div className="flex flex-col divide-y divide-outline-variant/10 bg-surface-container-low">
                 {catGroups.map(([label, { icon, items: group }]) => {
@@ -1057,7 +1067,7 @@ function ItemGroups({ items, viewMode }: { items: ShoppingListItemRow[]; viewMod
                   );
                 })}
               </div>
-            </div>
+            </CollapsibleStoreSection>
           );
         })}
       </div>
@@ -1072,27 +1082,62 @@ function ItemGroups({ items, viewMode }: { items: ShoppingListItemRow[]; viewMod
         if (group.length === 0) return null;
         const subtotal = group.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0);
         return (
-          <div key={store} className="rounded-2xl border border-outline-variant/10 bg-surface-container-low overflow-hidden">
-            <div
-              className="px-lg py-sm border-b border-outline-variant/10 flex items-center gap-sm"
-              style={{ background: STORE_COLOR[store] + "12" }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 18, color: STORE_COLOR[store] }}>
-                {STORE_ICON[store]}
-              </span>
-              <h3 className="text-body-sm font-bold flex-1" style={{ color: STORE_COLOR[store] }}>
-                {STORE_LABEL[store]} ({group.length})
-              </h3>
-              <span className="text-body-sm font-bold text-on-surface">{formatCurrency(subtotal)}</span>
-            </div>
-            <ul className="divide-y divide-outline-variant/10">
+          <CollapsibleStoreSection
+            key={store}
+            store={store}
+            count={group.length}
+            subtotal={subtotal}
+          >
+            <ul className="divide-y divide-outline-variant/10 bg-surface-container-low">
               {group.map((it) => (
                 <ItemRow key={it.id} item={it} />
               ))}
             </ul>
-          </div>
+          </CollapsibleStoreSection>
         );
       })}
+    </div>
+  );
+}
+
+function CollapsibleStoreSection({
+  store,
+  count,
+  subtotal,
+  children,
+}: {
+  store: Store;
+  count: number;
+  subtotal: number;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div
+      className="rounded-2xl border overflow-hidden"
+      style={{ borderColor: STORE_COLOR[store] + "30" }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full px-lg py-sm flex items-center gap-sm transition-colors"
+        style={{ background: STORE_COLOR[store] + "14" }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 18, color: STORE_COLOR[store] }}>
+          {STORE_ICON[store]}
+        </span>
+        <h3 className="text-body-sm font-bold flex-1 text-left" style={{ color: STORE_COLOR[store] }}>
+          {STORE_LABEL[store]} ({count})
+        </h3>
+        <span className="text-body-sm font-bold text-on-surface mr-xs">{formatCurrency(subtotal)}</span>
+        <span
+          className="material-symbols-outlined text-on-surface-variant transition-transform"
+          style={{ fontSize: 18, transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+        >
+          expand_more
+        </span>
+      </button>
+      {open && children}
     </div>
   );
 }
@@ -1413,7 +1458,9 @@ function ItemEditDialog({ item, onClose }: { item: ShoppingListItemRow; onClose:
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SuggestionsPanel({ suggestions, listId }: { suggestions: Suggestion[]; listId: string }) {
+  const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+
   function pick(s: Suggestion) {
     startTransition(async () => {
       await addItem({
@@ -1430,43 +1477,57 @@ function SuggestionsPanel({ suggestions, listId }: { suggestions: Suggestion[]; 
   }
 
   return (
-    <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low p-md">
-      <div className="flex items-center gap-sm mb-sm">
+    <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-sm px-lg py-md hover:bg-surface-container transition-colors"
+      >
         <span className="material-symbols-outlined" style={{ fontSize: 18, color: "var(--color-tertiary)" }}>
           lightbulb
         </span>
-        <h3 className="text-body-sm font-bold text-on-surface">
+        <h3 className="text-body-sm font-bold text-on-surface flex-1 text-left">
           Sugerencias del historial ({suggestions.length})
         </h3>
-        <span className="text-label-md text-on-surface-variant">
-          Items que sueles comprar y no están en esta lista
+        <span
+          className="material-symbols-outlined text-on-surface-variant transition-transform"
+          style={{ fontSize: 18, transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+        >
+          expand_more
         </span>
-      </div>
-      <div className="flex flex-wrap gap-xs">
-        {suggestions.map((s, idx) => (
-          <button
-            key={`${s.store}|${s.name}|${idx}`}
-            type="button"
-            disabled={pending}
-            onClick={() => pick(s)}
-            className="h-8 px-sm rounded-full bg-surface-container-high hover:bg-surface-container-highest text-body-sm text-on-surface flex items-center gap-xs disabled:opacity-50 transition-colors"
-          >
-            <span
-              className="material-symbols-outlined"
-              style={{ fontSize: 12, color: STORE_COLOR[s.store] }}
-            >
-              {STORE_ICON[s.store]}
-            </span>
-            {s.name}
-            <span className="text-label-md text-on-surface-variant">
-              · {formatCurrency(s.unit_price)}
-            </span>
-            <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: 14 }}>
-              add
-            </span>
-          </button>
-        ))}
-      </div>
+      </button>
+      {open && (
+        <div className="px-lg pb-md pt-xs border-t border-outline-variant/10">
+          <p className="text-label-md text-on-surface-variant mb-sm">
+            Items que sueles comprar y no están en esta lista
+          </p>
+          <div className="flex flex-wrap gap-xs">
+            {suggestions.map((s, idx) => (
+              <button
+                key={`${s.store}|${s.name}|${idx}`}
+                type="button"
+                disabled={pending}
+                onClick={() => pick(s)}
+                className="h-8 px-sm rounded-full bg-surface-container-high hover:bg-surface-container-highest text-body-sm text-on-surface flex items-center gap-xs disabled:opacity-50 transition-colors"
+              >
+                <span
+                  className="material-symbols-outlined"
+                  style={{ fontSize: 12, color: STORE_COLOR[s.store] }}
+                >
+                  {STORE_ICON[s.store]}
+                </span>
+                {s.name}
+                <span className="text-label-md text-on-surface-variant">
+                  · {formatCurrency(s.unit_price)}
+                </span>
+                <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: 14 }}>
+                  add
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
