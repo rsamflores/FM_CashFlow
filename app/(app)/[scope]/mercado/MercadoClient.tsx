@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { formatCurrency } from "@/lib/format";
 import type { AccountRow } from "@/lib/actions/accounts";
 import type { CategoryRow } from "@/lib/actions/categories";
@@ -296,6 +297,11 @@ export function MercadoClient({
         </div>
       )}
 
+      {/* Category pie charts — owners/editors only, when items have value */}
+      {!isShopper && items.some((i) => Number(i.quantity) * Number(i.unit_price) > 0) && (
+        <CategoryPieCharts items={items} />
+      )}
+
       {/* Search / add panel */}
       <SearchPanel listId={list.id} />
 
@@ -439,6 +445,148 @@ function BudgetCard({
             : "Crea la categoría y asígnale un presupuesto en Presupuestos."}
         </p>
       )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Category pie charts
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CAT_COLORS: Record<string, string> = {
+  "Frutas y Verduras":     "#4caf50",
+  "Carnes y Mariscos":     "#ef5350",
+  "Lácteos y Huevos":      "#64b5f6",
+  "Pan y Tortillas":       "#ffb74d",
+  "Granos y Pasta":        "#ffd54f",
+  "Enlatados y Conservas": "#ff8a65",
+  "Condimentos y Salsas":  "#ba68c8",
+  "Snacks y Dulces":       "#f06292",
+  "Bebidas":               "#29b6f6",
+  "Congelados":            "#4dd0e1",
+  "Limpieza del Hogar":    "#4db6ac",
+  "Higiene Personal":      "#81c784",
+  "Otros":                 "#90a4ae",
+};
+
+type PieSlice = { name: string; value: number; icon: string; color: string };
+
+function buildPieData(items: ShoppingListItemRow[]): PieSlice[] {
+  const map = new Map<string, { value: number; icon: string }>();
+  for (const item of items) {
+    const amount = Number(item.quantity) * Number(item.unit_price);
+    if (amount <= 0) continue;
+    const cat = classifyItem(item.name, item.category_override);
+    const prev = map.get(cat.label);
+    map.set(cat.label, { value: (prev?.value ?? 0) + amount, icon: cat.icon });
+  }
+  return [...map.entries()]
+    .map(([name, { value, icon }]) => ({
+      name,
+      value,
+      icon,
+      color: CAT_COLORS[name] ?? "#90a4ae",
+    }))
+    .sort((a, b) => b.value - a.value);
+}
+
+function CategoryPieCharts({ items }: { items: ShoppingListItemRow[] }) {
+  const superItems = items.filter((i) => i.store !== "pricesmart");
+  const psItems    = items.filter((i) => i.store === "pricesmart");
+  const superData  = buildPieData(superItems);
+  const psData     = buildPieData(psItems);
+  const hasSuper   = superData.length > 0;
+  const hasPS      = psData.length > 0;
+  if (!hasSuper && !hasPS) return null;
+
+  return (
+    <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low p-md flex flex-col gap-md">
+      <p className="text-label-md font-bold text-on-surface-variant">Distribución por tipo de producto</p>
+      <div
+        className="grid gap-lg"
+        style={{ gridTemplateColumns: hasSuper && hasPS ? "1fr 1fr" : "1fr" }}
+      >
+        {hasSuper && (
+          <PieChartPanel
+            title="Supermercado"
+            subtitle="Walmart · Agromercado · otros"
+            storeColor={STORE_COLOR.walmart}
+            data={superData}
+          />
+        )}
+        {hasPS && (
+          <PieChartPanel
+            title="PriceSmart"
+            subtitle="PriceSmart"
+            storeColor={STORE_COLOR.pricesmart}
+            data={psData}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PieChartPanel({
+  title,
+  subtitle,
+  storeColor,
+  data,
+}: {
+  title: string;
+  subtitle: string;
+  storeColor: string;
+  data: PieSlice[];
+}) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  return (
+    <div className="flex flex-col gap-sm">
+      <div>
+        <p className="text-body-sm font-bold" style={{ color: storeColor }}>{title}</p>
+        <p className="text-label-md text-on-surface-variant">{subtitle}</p>
+      </div>
+      <div style={{ height: 160 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              cx="50%"
+              cy="50%"
+              innerRadius={45}
+              outerRadius={70}
+              paddingAngle={2}
+              dataKey="value"
+              nameKey="name"
+            >
+              {data.map((entry, i) => (
+                <Cell key={i} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip
+              formatter={(val) => [formatCurrency(Number(val)), ""]}
+              contentStyle={{
+                background: "var(--color-surface-container)",
+                border: "1px solid color-mix(in srgb, var(--color-outline-variant) 30%, transparent)",
+                borderRadius: 8,
+                fontSize: 12,
+                color: "var(--color-on-surface)",
+              }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="flex flex-col gap-xs">
+        {data.map((d) => (
+          <div key={d.name} className="flex items-center gap-xs">
+            <div className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
+            <span className="text-label-md text-on-surface flex-1 truncate">{d.icon} {d.name}</span>
+            <span className="text-label-md font-bold text-on-surface shrink-0">{formatCurrency(d.value)}</span>
+            <span className="text-label-md text-on-surface-variant shrink-0" style={{ minWidth: 36, textAlign: "right" }}>
+              {Math.round((d.value / total) * 100)}%
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
