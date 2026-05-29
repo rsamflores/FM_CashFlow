@@ -831,17 +831,32 @@ async function buildStoreBudget(
     .maybeSingle();
   const expected = Number(budgetRow?.expected_amount ?? 0);
 
-  // Spent: TODOS los egresos (confirmados + pendientes) que afectan balance en esa categoría este mes
-  const { data: spentRows } = await supabase
-    .from("transactions")
-    .select("amount")
-    .eq("scope", "personal")
-    .eq("kind", "expense")
-    .eq("category_id", cat.id)
-    .eq("affects_balance", true)
-    .gte("occurred_on", monthStart)
-    .lt("occurred_on", monthEnd);
-  const spent = (spentRows ?? []).reduce((s, r) => s + Number(r.amount), 0);
+  // Spent: misma lógica que la página de presupuestos —
+  // · Confirmados del mes actual (filtro de fecha)
+  // · Pendientes sin filtro de fecha (siempre visibles hasta que se confirmen)
+  const [confirmedRes, pendingRes] = await Promise.all([
+    supabase
+      .from("transactions")
+      .select("amount")
+      .eq("scope", "personal")
+      .eq("kind", "expense")
+      .eq("category_id", cat.id)
+      .eq("affects_balance", true)
+      .eq("is_confirmed", true)
+      .gte("occurred_on", monthStart)
+      .lt("occurred_on", monthEnd),
+    supabase
+      .from("transactions")
+      .select("amount")
+      .eq("scope", "personal")
+      .eq("kind", "expense")
+      .eq("category_id", cat.id)
+      .eq("affects_balance", true)
+      .eq("is_confirmed", false),
+  ]);
+  const spent =
+    (confirmedRes.data ?? []).reduce((s, r) => s + Number(r.amount), 0) +
+    (pendingRes.data ?? []).reduce((s, r) => s + Number(r.amount), 0);
 
   return { category_id: cat.id, category_name: cat.name, expected, spent, list_total };
 }
