@@ -1198,7 +1198,7 @@ function ItemRow({ item, showStoreBadge = false }: { item: ShoppingListItemRow; 
 
   return (
     <>
-      <li className="flex items-center gap-sm px-md py-sm" style={{ opacity: pending ? 0.5 : 1 }}>
+      <li className="flex items-center gap-xs px-md py-sm" style={{ opacity: pending ? 0.5 : 1 }}>
         <input
           type="checkbox"
           checked={item.is_checked}
@@ -1206,12 +1206,13 @@ function ItemRow({ item, showStoreBadge = false }: { item: ShoppingListItemRow; 
           className="w-5 h-5 accent-primary shrink-0"
           title="En el carrito"
         />
+
         {/* Thumbnail — clickable to open edit */}
         <button
           type="button"
           onClick={() => setEditOpen(true)}
           title="Editar ítem"
-          className="w-12 h-12 rounded-md shrink-0 overflow-hidden hover:ring-2 hover:ring-primary transition-all"
+          className="w-10 h-10 rounded-md shrink-0 overflow-hidden hover:ring-2 hover:ring-primary transition-all"
         >
           {item.image_url ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -1223,21 +1224,25 @@ function ItemRow({ item, showStoreBadge = false }: { item: ShoppingListItemRow; 
             />
           ) : (
             <div className="w-full h-full bg-surface-container-highest flex items-center justify-center">
-              <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: 18 }}>
+              <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: 16 }}>
                 shopping_basket
               </span>
             </div>
           )}
         </button>
+
+        {/* Name + price info — gets all remaining space */}
         <div className="flex-1 min-w-0">
           <p
-            className="text-body-sm text-on-surface truncate"
-            style={{ textDecoration: item.is_checked ? "line-through" : "none" }}
+            className="text-body-sm text-on-surface"
+            style={{ textDecoration: item.is_checked ? "line-through" : "none", wordBreak: "break-word" }}
           >
             {item.name}
           </p>
           <p className="text-label-md text-on-surface-variant flex items-center gap-xs flex-wrap">
             {formatCurrency(subtotal)}
+            {/* Mobile: show qty × unit as compact text */}
+            <span className="md:hidden opacity-60">· {qty} × ${Number(item.unit_price).toFixed(2)}</span>
             {/* Price change badge — shown when cron detected a price move */}
             {item.prev_price != null && Math.abs(Number(item.prev_price) - Number(item.unit_price)) >= 0.02 && (
               <PriceBadge prev={Number(item.prev_price)} current={Number(item.unit_price)} />
@@ -1253,43 +1258,51 @@ function ItemRow({ item, showStoreBadge = false }: { item: ShoppingListItemRow; 
             )}
           </p>
         </div>
-        <input
-          type="number"
-          step="1"
-          min="1"
-          value={qty}
-          onChange={(e) => setQty(e.target.value)}
-          onBlur={commitQty}
-          className="w-16 h-8 px-sm rounded-md bg-surface-container-high text-on-surface text-body-sm text-right outline-none border-none"
-          title="Cantidad"
-        />
-        <span className="text-label-md text-on-surface-variant">×</span>
-        <input
-          type="number"
-          step="0.01"
-          min="0"
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-          onBlur={commitPrice}
-          className="w-20 h-8 px-sm rounded-md bg-surface-container-high text-on-surface text-body-sm text-right outline-none border-none"
-          title="Precio unitario"
-        />
-        <button
-          type="button"
-          onClick={() => setEditOpen(true)}
-          title="Editar ítem"
-          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container-highest text-on-surface-variant transition-colors"
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>
-        </button>
-        <button
-          type="button"
-          onClick={remove}
-          title="Eliminar"
-          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors"
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
-        </button>
+
+        {/* Desktop only: inline qty + price inputs */}
+        <div className="hidden md:flex items-center gap-xs shrink-0">
+          <input
+            type="number"
+            step="1"
+            min="1"
+            value={qty}
+            onChange={(e) => setQty(e.target.value)}
+            onBlur={commitQty}
+            className="w-14 h-8 px-sm rounded-md bg-surface-container-high text-on-surface text-body-sm text-right outline-none border-none"
+            title="Cantidad"
+          />
+          <span className="text-label-md text-on-surface-variant">×</span>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            onBlur={commitPrice}
+            className="w-20 h-8 px-sm rounded-md bg-surface-container-high text-on-surface text-body-sm text-right outline-none border-none"
+            title="Precio unitario"
+          />
+        </div>
+
+        {/* Edit + delete — always visible */}
+        <div className="flex items-center gap-xs shrink-0">
+          <button
+            type="button"
+            onClick={() => setEditOpen(true)}
+            title="Editar ítem"
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container-highest text-on-surface-variant transition-colors"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>
+          </button>
+          <button
+            type="button"
+            onClick={remove}
+            title="Eliminar"
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-error-container text-on-surface-variant hover:text-error transition-colors"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
+          </button>
+        </div>
       </li>
       {editOpen && <ItemEditDialog item={item} onClose={() => setEditOpen(false)} />}
     </>
