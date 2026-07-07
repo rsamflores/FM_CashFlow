@@ -34,10 +34,16 @@ export function BudgetsClient({ scope, budgets, categories, transactions, accoun
     });
   }
 
-  // Confirmed expenses always count; pending only if affects_balance=false (employee-submitted)
+  // Only count expenses from the current budget month
+  const monthPrefix = currentMonth.slice(0, 7); // "YYYY-MM"
   const spentByCategory: Record<string, number> = {};
   for (const tx of transactions) {
-    if (tx.kind === "expense" && tx.category_id && (tx.is_confirmed || !tx.affects_balance)) {
+    if (
+      tx.kind === "expense" &&
+      tx.category_id &&
+      tx.occurred_on.startsWith(monthPrefix) &&
+      (tx.is_confirmed || !tx.affects_balance)
+    ) {
       spentByCategory[tx.category_id] = (spentByCategory[tx.category_id] ?? 0) + Number(tx.amount);
     }
   }
