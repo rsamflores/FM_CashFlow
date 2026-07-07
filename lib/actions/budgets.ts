@@ -125,6 +125,56 @@ export async function upsertBudget(scope: Scope, formData: FormData) {
   return { success: true };
 }
 
+export async function resetBudgetsFromPriorMonth(
+  scope: Scope,
+  periodMonth: string,
+): Promise<{ replaced: number } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado" };
+
+  const admin = createAdminClient();
+
+  // Find most recent prior month that has budgets
+  const { data: prior } = await admin
+    .from("planned_budgets")
+    .select("period_month")
+    .eq("scope", scope)
+    .lt("period_month", periodMonth)
+    .order("period_month", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!prior?.period_month) return { error: "No hay presupuestos de meses anteriores para copiar" };
+
+  const { data: priorBudgets } = await admin
+    .from("planned_budgets")
+    .select("category_id, account_id, expected_amount, note, is_single_payment")
+    .eq("scope", scope)
+    .eq("period_month", prior.period_month);
+
+  if (!priorBudgets || priorBudgets.length === 0) return { error: "El mes anterior no tiene presupuestos" };
+
+  // Delete current month's entries then re-insert from prior month
+  await admin.from("planned_budgets").delete().eq("scope", scope).eq("period_month", periodMonth);
+
+  const rows = priorBudgets.map((b) => ({
+    scope,
+    category_id: b.category_id,
+    account_id: b.account_id,
+    expected_amount: b.expected_amount,
+    note: b.note,
+    is_single_payment: b.is_single_payment,
+    period_month: periodMonth,
+  }));
+
+  const { error } = await admin.from("planned_budgets").insert(rows);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/${scope}/budgets`);
+  return { replaced: rows.length };
+}
+
 export async function deleteBudget(id: string, scope: Scope) {
   const supabase = await createClient();
   const { error } = await supabase.from("planned_budgets").delete().eq("id", id);

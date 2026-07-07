@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { BudgetDialog } from "@/components/forms/BudgetDialog";
-import { deleteBudget, type BudgetRow } from "@/lib/actions/budgets";
+import { deleteBudget, resetBudgetsFromPriorMonth, type BudgetRow } from "@/lib/actions/budgets";
 import type { CategoryRow } from "@/lib/actions/categories";
 import type { TransactionRow } from "@/lib/actions/transactions";
 import type { AccountRow } from "@/lib/actions/accounts";
@@ -22,6 +22,17 @@ type Props = {
 export function BudgetsClient({ scope, budgets, categories, transactions, accounts, currentMonth }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editBudget, setEditBudget] = useState<BudgetRow | undefined>();
+  const [resetPending, startReset] = useTransition();
+  const [resetError, setResetError] = useState<string | null>(null);
+
+  function handleReset() {
+    if (!confirm("¿Reiniciar los presupuestos de este mes copiando los montos del mes anterior? Los presupuestos actuales serán reemplazados.")) return;
+    setResetError(null);
+    startReset(async () => {
+      const res = await resetBudgetsFromPriorMonth(scope, currentMonth);
+      if ("error" in res) setResetError(res.error);
+    });
+  }
 
   // Confirmed expenses always count; pending only if affects_balance=false (employee-submitted)
   const spentByCategory: Record<string, number> = {};
@@ -52,7 +63,7 @@ export function BudgetsClient({ scope, budgets, categories, transactions, accoun
 
   return (
     <>
-      <header className="mb-xl flex items-end justify-between">
+      <header className="mb-xl flex items-end justify-between gap-sm flex-wrap">
         <div>
           <h2 className="text-headline-lg text-on-surface capitalize">
             Presupuesto — {monthLabel}
@@ -61,15 +72,35 @@ export function BudgetsClient({ scope, budgets, categories, transactions, accoun
             {formatCurrency(totalSpent)} gastado de {formatCurrency(totalBudgeted)} presupuestado
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => { setEditBudget(undefined); setDialogOpen(true); }}
-          className="flex items-center gap-xs h-10 px-lg rounded-full bg-primary-container text-on-primary-container font-bold hover:opacity-90 transition-opacity text-body-sm"
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
-          Nuevo presupuesto
-        </button>
+        <div className="flex items-center gap-sm flex-wrap">
+          <button
+            type="button"
+            onClick={handleReset}
+            disabled={resetPending}
+            className="flex items-center gap-xs h-10 px-md rounded-full border border-outline-variant/20 text-on-surface-variant hover:bg-surface-container-high transition-colors text-body-sm disabled:opacity-50"
+            title="Copiar montos del mes anterior y reiniciar barras de progreso"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+              {resetPending ? "hourglass_empty" : "restart_alt"}
+            </span>
+            {resetPending ? "Reiniciando…" : "Reiniciar mes"}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setEditBudget(undefined); setDialogOpen(true); }}
+            className="flex items-center gap-xs h-10 px-lg rounded-full bg-primary-container text-on-primary-container font-bold hover:opacity-90 transition-opacity text-body-sm"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
+            Nuevo presupuesto
+          </button>
+        </div>
       </header>
+
+      {resetError && (
+        <div className="mb-md px-md py-sm rounded-xl text-body-sm" style={{ background: "var(--color-error)15", color: "var(--color-error)" }}>
+          {resetError}
+        </div>
+      )}
 
       {/* Global progress bar */}
       {budgets.length > 0 && (
