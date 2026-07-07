@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { AccountDialog } from "@/components/forms/AccountDialog";
-import { archiveAccount, deleteAccount, type AccountRow } from "@/lib/actions/accounts";
+import { archiveAccount, deleteAccount, adjustAccountBalance, type AccountRow } from "@/lib/actions/accounts";
 import { formatCurrency, formatDay } from "@/lib/format";
 import type { TransactionRow } from "@/lib/actions/transactions";
 import type { Scope } from "@/lib/scope";
@@ -35,6 +35,7 @@ export function AccountsClient({ scope, accounts, netByAccount, usedByAccount, t
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editAccount, setEditAccount] = useState<AccountRow | undefined>();
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [adjustAccount, setAdjustAccount] = useState<AccountRow | null>(null);
 
   // Current month income/expense per account (confirmed, non-transfer)
   const now = new Date();
@@ -126,6 +127,7 @@ export function AccountsClient({ scope, accounts, netByAccount, usedByAccount, t
               onEdit={() => openEdit(account)}
               onArchive={() => handleArchive(account)}
               onDelete={() => handleDelete(account)}
+              onAdjust={() => setAdjustAccount(account)}
             />
           ))}
         </div>
@@ -148,6 +150,16 @@ export function AccountsClient({ scope, accounts, netByAccount, usedByAccount, t
         onClose={() => setDialogOpen(false)}
         editAccount={editAccount}
       />
+
+      {adjustAccount && (
+        <AdjustBalanceDialog
+          account={adjustAccount}
+          scope={scope}
+          currentBalance={Number(adjustAccount.opening_balance) + (netByAccount[adjustAccount.id] ?? 0)}
+          usedAmount={usedByAccount[adjustAccount.id] ?? 0}
+          onClose={() => setAdjustAccount(null)}
+        />
+      )}
     </>
   );
 }
@@ -163,6 +175,7 @@ function AccountCard({
   onEdit,
   onArchive,
   onDelete,
+  onAdjust,
 }: {
   account: AccountRow;
   netAmount: number;
@@ -174,6 +187,7 @@ function AccountCard({
   onEdit: () => void;
   onArchive: () => void;
   onDelete: () => void;
+  onAdjust: () => void;
 }) {
   const accentColor = account.color ?? "#c0c1ff";
   const icon = TYPE_ICONS[account.type];
@@ -309,12 +323,212 @@ function AccountCard({
         )}
       </div>
 
-      {/* "Ver historial" hint */}
-      <div className="relative z-10 flex items-center gap-xs text-on-surface-variant" style={{ marginTop: -4 }}>
-        <span className="material-symbols-outlined" style={{ fontSize: 12 }}>
-          {isSelected ? "expand_less" : "history"}
-        </span>
-        <span className="text-label-md">{isSelected ? "Ocultar historial" : "Ver historial"}</span>
+      {/* Bottom row: adjust balance + history hint */}
+      <div className="relative z-10 flex items-center justify-between gap-sm" style={{ marginTop: -4 }} onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={onAdjust}
+          className="flex items-center gap-xs h-7 px-sm rounded-full text-label-md font-bold transition-colors hover:opacity-90"
+          style={{ background: accentColor + "25", color: accentColor }}
+          title="Ajustar al saldo real del banco"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 13 }}>tune</span>
+          Ajustar saldo
+        </button>
+        <div className="flex items-center gap-xs text-on-surface-variant pointer-events-none">
+          <span className="material-symbols-outlined" style={{ fontSize: 12 }}>
+            {isSelected ? "expand_less" : "history"}
+          </span>
+          <span className="text-label-md">{isSelected ? "Ocultar" : "Historial"}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Adjust Balance Dialog
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AdjustBalanceDialog({
+  account,
+  scope,
+  currentBalance,
+  usedAmount,
+  onClose,
+}: {
+  account: AccountRow;
+  scope: Scope;
+  currentBalance: number;
+  usedAmount: number;
+  onClose: () => void;
+}) {
+  const isCreditCard = account.type === "credit_card";
+  // For credit cards we adjust the debt (usedAmount), not the balance
+  const appValue = isCreditCard ? usedAmount : currentBalance;
+
+  const now = new Date();
+  const monthName = now.toLocaleDateString("es-SV", { month: "long", year: "numeric" });
+  const defaultDesc = `Ajuste de saldo — ${monthName}`;
+
+  const [realValue, setRealValue] = useState("");
+  const [description, setDescription] = useState(defaultDesc);
+  const [isPending, startTransition] = useTransition();
+  const [result, setResult] = useState<{ kind: "income" | "expense"; amount: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const parsed = parseFloat(realValue.replace(",", "."));
+  const delta = Number.isFinite(parsed) ? parsed - appValue : null;
+  const isIncome = isCreditCard ? (delta !== null && delta < 0) : (delta !== null && delta > 0);
+  const deltaAbs = delta !== null ? Math.abs(delta) : null;
+  const noChange = delta !== null && Math.abs(delta) < 0.01;
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (delta === null || noChange) return;
+    setError(null);
+    startTransition(async () => {
+      const res = await adjustAccountBalance(account.id, scope, parsed, description);
+      if ("error" in res) { setError(res.error); return; }
+      setResult(res);
+      setTimeout(onClose, 1800);
+    });
+  }
+
+  const accentColor = account.color ?? "#c0c1ff";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-md">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="relative w-full rounded-2xl border border-outline-variant/10 bg-surface-container shadow-2xl overflow-hidden"
+        style={{ maxWidth: 440 }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-lg py-md border-b border-outline-variant/10">
+          <div className="flex items-center gap-sm">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: accentColor + "25" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16, color: accentColor }}>tune</span>
+            </div>
+            <div>
+              <p className="text-body-sm font-bold text-on-surface">Ajustar saldo</p>
+              <p className="text-label-md text-on-surface-variant">{account.name}</p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors">
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
+          </button>
+        </div>
+
+        {result ? (
+          <div className="flex flex-col items-center gap-sm py-xl px-lg text-center">
+            <span className="material-symbols-outlined" style={{ fontSize: 48, color: result.kind === "income" ? "var(--color-secondary-fixed)" : "var(--color-error)" }}>
+              check_circle
+            </span>
+            <p className="text-body-sm font-bold text-on-surface">Saldo ajustado</p>
+            <p className="text-label-md text-on-surface-variant">
+              Se registró un {result.kind === "income" ? "ingreso" : "egreso"} de{" "}
+              <strong>{formatCurrency(result.amount)}</strong>
+            </p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="flex flex-col gap-md p-lg">
+            {/* Current app value */}
+            <div className="rounded-xl p-md flex items-center justify-between" style={{ background: accentColor + "12" }}>
+              <p className="text-label-md text-on-surface-variant">
+                {isCreditCard ? "Deuda según la app" : "Saldo según la app"}
+              </p>
+              <p className="text-body-sm font-bold" style={{ color: accentColor }}>
+                {formatCurrency(appValue)}
+              </p>
+            </div>
+
+            {/* Real balance input */}
+            <div>
+              <label className="text-label-md text-on-surface-variant block mb-xs">
+                {isCreditCard ? "Deuda real hoy (lo que debes pagar)" : "Saldo real hoy (lo que muestra tu banco)"}
+              </label>
+              <div className="relative">
+                <span className="absolute left-md top-1/2 -translate-y-1/2 text-body-sm text-on-surface-variant font-bold">$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  required
+                  autoFocus
+                  value={realValue}
+                  onChange={(e) => setRealValue(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full h-12 pl-8 pr-md rounded-xl bg-surface-container-low border border-outline-variant/20 text-body-lg font-bold text-on-surface focus:outline-none focus:border-primary transition-colors"
+                  style={{ borderColor: accentColor + "40" }}
+                />
+              </div>
+            </div>
+
+            {/* Live delta preview */}
+            {delta !== null && !noChange && (
+              <div
+                className="rounded-xl p-md flex items-start gap-sm"
+                style={{
+                  background: isIncome ? "var(--color-secondary-fixed)12" : "var(--color-error)12",
+                  borderLeft: `3px solid ${isIncome ? "var(--color-secondary-fixed)" : "var(--color-error)"}`,
+                }}
+              >
+                <span
+                  className="material-symbols-outlined mt-[2px]"
+                  style={{ fontSize: 18, color: isIncome ? "var(--color-secondary-fixed)" : "var(--color-error)" }}
+                >
+                  {isIncome ? "arrow_upward" : "arrow_downward"}
+                </span>
+                <div>
+                  <p className="text-body-sm font-bold text-on-surface">
+                    Diferencia: {isIncome ? "+" : "-"}{formatCurrency(deltaAbs!)}
+                  </p>
+                  <p className="text-label-md text-on-surface-variant">
+                    Se creará un <strong>{isIncome ? "ingreso" : "egreso"}</strong> confirmado de{" "}
+                    {formatCurrency(deltaAbs!)} en esta cuenta
+                  </p>
+                </div>
+              </div>
+            )}
+            {noChange && (
+              <p className="text-label-md text-on-surface-variant text-center">
+                El saldo ya coincide con el real
+              </p>
+            )}
+
+            {/* Description */}
+            <div>
+              <label className="text-label-md text-on-surface-variant block mb-xs">Descripción</label>
+              <input
+                type="text"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full h-10 px-md rounded-xl bg-surface-container-low border border-outline-variant/20 text-body-sm text-on-surface focus:outline-none focus:border-primary transition-colors"
+              />
+            </div>
+
+            {error && (
+              <p className="text-label-md px-sm py-xs rounded-lg" style={{ background: "var(--color-error)15", color: "var(--color-error)" }}>
+                {error}
+              </p>
+            )}
+
+            <div className="flex gap-sm justify-end pt-sm border-t border-outline-variant/10">
+              <button type="button" onClick={onClose} className="h-9 px-lg rounded-full text-body-sm text-on-surface-variant hover:bg-surface-container-high transition-colors">
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isPending || delta === null || noChange}
+                className="h-9 px-lg rounded-full text-body-sm font-bold transition-opacity disabled:opacity-50"
+                style={{ background: accentColor, color: "white" }}
+              >
+                {isPending ? "Aplicando…" : "Crear ajuste"}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
